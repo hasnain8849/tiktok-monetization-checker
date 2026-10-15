@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { TikTokMark } from "@/components/tiktok/top-bar";
 import {
-  findProfile,
   formatCount,
   sampleSearches,
   type Profile,
@@ -45,9 +44,10 @@ export function CheckerView({ initialHandle, onBack, onResult, onApply }: Checke
   const [value, setValue] = React.useState(initialHandle || "@mrbeast");
   const [stage, setStage] = React.useState<Stage>("idle");
   const [stepIdx, setStepIdx] = React.useState(0);
+  const [resultProfile, setResultProfile] = React.useState<Profile | null>(null);
   const { toast } = useToast();
 
-  const run = () => {
+  const run = async () => {
     const v = value.trim();
     if (!v) {
       toast({ title: "Enter a username", description: "Please type a TikTok handle.", variant: "destructive" });
@@ -65,24 +65,74 @@ export function CheckerView({ initialHandle, onBack, onResult, onApply }: Checke
       });
     }, 450);
 
-    setTimeout(() => {
+    // Call the backend API in parallel with the animated fetch steps.
+    // The API route persists the profile to the Prisma DB cache and
+    // (later) saves the audit row.
+    const minDelay = new Promise<void>((res) =>
+      setTimeout(res, fetchingSteps.length * 450 + 200)
+    );
+
+    try {
+      const respPromise = fetch(
+        `/api/profiles/${encodeURIComponent(v)}`,
+        { headers: { Accept: "application/json" } }
+      );
+      const [resp] = await Promise.all([respPromise, minDelay]);
       clearInterval(id);
-      const p = findProfile(v);
-      if (p) {
-        setStage("auditing");
-        setTimeout(() => {
-          setStage("done");
-          onResult(p);
-        }, 800);
-      } else {
+
+      if (resp.status === 404) {
         setStage("not-found");
         toast({
           title: "Profile not found",
           description: `No demo profile matches "${v}". Try @mrbeast, @charlidamelio, @artbyjordan, or @prankzlife.`,
           variant: "destructive",
         });
+        return;
       }
-    }, fetchingSteps.length * 450 + 200);
+      if (!resp.ok) {
+        throw new Error(`API error ${resp.status}`);
+      }
+      const data = (await resp.json()) as { profile: Profile };
+      const p = data.profile;
+
+      // Persist the audit row to /api/audits (fire-and-forget).
+      const passedCount = p.checks.filter((c) => c.passed).length;
+      const allPassed = passedCount === p.checks.length;
+      const status: "eligible" | "ineligible" | "restricted" = allPassed
+        ? "eligible"
+        : p.checks.some((c) => c.actual === "Restricted")
+          ? "restricted"
+          : "ineligible";
+      fetch("/api/audits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          handle: p.handle,
+          avatarInitials: p.avatarInitials,
+          followers: p.metrics.followers,
+          eligible: allPassed,
+          status,
+          checksPassed: passedCount,
+          checksTotal: p.checks.length,
+        }),
+      }).catch((err) => console.warn("audit save failed:", err));
+
+      setStage("auditing");
+      setTimeout(() => {
+        setStage("done");
+        setResultProfile(p);
+        onResult(p);
+      }, 800);
+    } catch (e) {
+      clearInterval(id);
+      console.error(e);
+      setStage("not-found");
+      toast({
+        title: "Lookup failed",
+        description: "Could not reach the audit service. Try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -195,7 +245,7 @@ export function CheckerView({ initialHandle, onBack, onResult, onApply }: Checke
       {/* Result card */}
       {(stage === "done" || stage === "not-found") && (
         <ResultCard
-          profile={stage === "done" ? findProfile(value) : null}
+          profile={stage === "done" ? resultProfile : null}
           onApply={onApply}
           onRecheck={run}
         />

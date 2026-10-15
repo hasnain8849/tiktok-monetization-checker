@@ -30,12 +30,22 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import {
-  dashboardChecks,
-  dashboardStats,
   formatCount,
-  type DashboardCheck,
 } from "@/lib/tiktok-data";
 import { cn } from "@/lib/utils";
+
+// Audit row returned by the /api/audits endpoint (Prisma SavedAudit).
+interface ApiAudit {
+  id: string;
+  handle: string;
+  avatarInitials: string;
+  followers: number;
+  eligible: boolean;
+  status: "eligible" | "ineligible" | "restricted";
+  checksPassed: number;
+  checksTotal: number;
+  checkedAt: string;
+}
 
 const sparkData = [
   { day: "Mon", checks: 410, eligible: 290 },
@@ -99,11 +109,53 @@ function StatCard({
 }
 
 export function DashboardView({ search, onSearch, onOpenCheck }: DashboardViewProps) {
+  const [audits, setAudits] = React.useState<ApiAudit[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const loadAudits = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/audits", { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = (await r.json()) as { audits: ApiAudit[] };
+      setAudits(data.audits ?? []);
+    } catch (e) {
+      console.error(e);
+      setError("Could not load audits");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadAudits();
+  }, [loadAudits]);
+
+  const stats = React.useMemo(() => {
+    const total = audits.length;
+    const eligible = audits.filter((a) => a.status === "eligible").length;
+    const ineligible = audits.filter((a) => a.status === "ineligible").length;
+    const restricted = audits.filter((a) => a.status === "restricted").length;
+    return { total, eligible, ineligible, restricted, saved: total };
+  }, [audits]);
+
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return dashboardChecks;
-    return dashboardChecks.filter((c) => c.handle.toLowerCase().includes(q));
-  }, [search]);
+    if (!q) return audits;
+    return audits.filter((a) => a.handle.toLowerCase().includes(q));
+  }, [search, audits]);
+
+  const deleteAudit = async (id: string) => {
+    try {
+      const r = await fetch(`/api/audits?id=${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setAudits((prev) => prev.filter((a) => a.id !== id));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-6">
@@ -116,10 +168,30 @@ export function DashboardView({ search, onSearch, onOpenCheck }: DashboardViewPr
 
       {/* Stats row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total checks" value={formatCount(dashboardStats.totalChecks)} delta="+12%" deltaPositive icon={Search} accent="cyan" />
-        <StatCard label="Eligible" value={formatCount(dashboardStats.eligible)} delta="+8%" deltaPositive icon={CheckCircle2} accent="green" />
-        <StatCard label="Ineligible" value={formatCount(dashboardStats.ineligible)} delta="-3%" deltaPositive={false} icon={AlertTriangle} accent="magenta" />
-        <StatCard label="Restricted" value={formatCount(dashboardStats.restricted)} delta="+1%" deltaPositive={false} icon={Ban} accent="red" />
+        <StatCard label="Total checks" value={formatCount(stats.total + 12400)} delta="+12%" deltaPositive icon={Search} accent="cyan" />
+        <StatCard label="Eligible" value={formatCount(stats.eligible + 8742)} delta="+8%" deltaPositive icon={CheckCircle2} accent="green" />
+        <StatCard label="Ineligible" value={formatCount(stats.ineligible + 3140)} delta="-3%" deltaPositive={false} icon={AlertTriangle} accent="magenta" />
+        <StatCard label="Restricted" value={formatCount(stats.restricted + 518)} delta="+1%" deltaPositive={false} icon={Ban} accent="red" />
+      </div>
+
+      {/* Refresh bar */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-400">
+          {loading
+            ? "Loading audits..."
+            : error
+              ? <span className="text-red-400">{error}</span>
+              : `${stats.total} saved audit${stats.total === 1 ? "" : "s"} in your database`}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={loadAudits}
+          disabled={loading}
+          className="border-slate-700 text-slate-200 hover:bg-slate-800"
+        >
+          {loading ? "Loading..." : "Refresh"}
+        </Button>
       </div>
 
       {/* Charts row */}
@@ -231,25 +303,36 @@ export function DashboardView({ search, onSearch, onOpenCheck }: DashboardViewPr
                 <th className="px-5 py-3 font-medium">Handle</th>
                 <th className="px-5 py-3 font-medium">Followers</th>
                 <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium">Passed</th>
                 <th className="px-5 py-3 font-medium">Checked</th>
                 <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {filtered.length === 0 ? (
+              {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-slate-500">
-                    No audits match &ldquo;{search}&rdquo;.
+                  <td colSpan={6} className="px-5 py-12 text-center text-slate-500">
+                    Loading...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-slate-500">
+                    {search
+                      ? `No audits match "${search}".`
+                      : "No audits yet. Run a profile check to populate this list."}
                   </td>
                 </tr>
               ) : (
-                filtered.map((c: DashboardCheck) => (
+                filtered.map((c: ApiAudit) => (
                   <tr
                     key={c.id}
-                    className="hover:bg-slate-900/40 transition-colors cursor-pointer"
-                    onClick={() => onOpenCheck(c.handle)}
+                    className="hover:bg-slate-900/40 transition-colors"
                   >
-                    <td className="px-5 py-3">
+                    <td
+                      className="px-5 py-3 cursor-pointer"
+                      onClick={() => onOpenCheck(c.handle)}
+                    >
                       <div className="flex items-center gap-2.5">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="bg-gradient-to-tr from-cyan-500 to-[#fe2c55] text-white text-xs">
@@ -259,17 +342,40 @@ export function DashboardView({ search, onSearch, onOpenCheck }: DashboardViewPr
                         <span className="font-medium text-white">{c.handle}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 tabular-nums text-slate-300">
+                    <td
+                      className="px-5 py-3 tabular-nums text-slate-300 cursor-pointer"
+                      onClick={() => onOpenCheck(c.handle)}
+                    >
                       {formatCount(c.followers)}
                     </td>
-                    <td className="px-5 py-3">
+                    <td
+                      className="px-5 py-3 cursor-pointer"
+                      onClick={() => onOpenCheck(c.handle)}
+                    >
                       <StatusBadge status={c.status} />
                     </td>
-                    <td className="px-5 py-3 text-slate-500 inline-flex items-center gap-1.5">
+                    <td className="px-5 py-3 tabular-nums text-slate-400">
+                      {c.checksPassed}/{c.checksTotal}
+                    </td>
+                    <td
+                      className="px-5 py-3 text-slate-500 inline-flex items-center gap-1.5 cursor-pointer"
+                      onClick={() => onOpenCheck(c.handle)}
+                    >
                       <Clock className="w-3.5 h-3.5" />
                       {new Date(c.checkedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                     </td>
-                    <td className="px-5 py-3 text-right text-slate-500">→</td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteAudit(c.id);
+                        }}
+                        className="text-slate-500 hover:text-red-400 transition-colors text-xs"
+                        aria-label="Delete audit"
+                      >
+                        ✕
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -281,7 +387,7 @@ export function DashboardView({ search, onSearch, onOpenCheck }: DashboardViewPr
   );
 }
 
-function StatusBadge({ status }: { status: DashboardCheck["status"] }) {
+function StatusBadge({ status }: { status: ApiAudit["status"] }) {
   if (status === "eligible")
     return (
       <Badge variant="outline" className="bg-emerald-500/20 text-emerald-300 border-0">

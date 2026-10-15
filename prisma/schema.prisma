@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -29,4 +26,42 @@ model Post {
   authorId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Cached TikTok profile lookups so re-checks are instant.
+model CachedProfile {
+  id              String   @id
+  handle          String   @unique
+  displayName     String
+  avatarInitials  String
+  bio             String   @default("")
+  url             String
+  verified        Boolean  @default(false)
+  region          String   @default("")
+  category        String   @default("")
+  accountAgeDays   Int      @default(0)
+  followers       Int      @default(0)
+  following       Int      @default(0)
+  likes           Int      @default(0)
+  videos          Int      @default(0)
+  engagementRate  Float    @default(0)
+  avgViewsPerVideo Int     @default(0)
+  monetizationEligible Boolean @default(false)
+  checksJson      String   @default("[]") // serialized EligibilityCheck[]
+  recentVideosJson String @default("[]")
+  fetchedAt       DateTime @default(now())
+  createdAt       DateTime @default(now())
+}
+
+// Audit history saved by the user from the dashboard.
+model SavedAudit {
+  id              String   @id @default(cuid())
+  handle          String
+  avatarInitials  String
+  followers       Int
+  eligible        Boolean
+  status          String   // "eligible" | "ineligible" | "restricted"
+  checksPassed    Int
+  checksTotal     Int
+  checkedAt       DateTime @default(now())
 }
