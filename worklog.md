@@ -176,3 +176,67 @@ Stage Summary:
 - 5 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{14,15,16,17,18}-*.png showing the full unlock flow.
 - Stitch variants: dispatched, still processing server-side; re-fetch when ready.
 - Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.
+
+---
+Task ID: async-payment-and-auth-6
+Agent: main
+Task: Continue all next steps: refactor payment flow to async with simulated bank webhook, add NextAuth.js user accounts scoped to saved audits + unlocks, and re-poll Stitch for variants.
+
+Work Log:
+- Refactored POST /api/payments to be async:
+  - Creates a PaymentAttempt row with status="pending" (was auto-verified).
+  - Schedules a setTimeout (4s) that calls verifyPaymentInternal(attempt.id), which UPDATEs the row to status="verified" and INSERT/UPSERTs the UnlockedProfile row. In production this would be an external bank webhook; we simulate it for the self-contained demo.
+  - Extracted verifyPaymentInternal as a shared function exported from the route module so the webhook route can reuse it.
+- Created GET /api/payments/[id] — returns the attempt's current status (pending | verified | rejected). Frontend uses this to poll for the webhook confirmation.
+- Created POST /api/payments/webhook — simulates an external bank webhook. Accepts { attemptId } OR { paymentRef, handle } and verifies the matching PaymentAttempt. This is what a real bank's API would call.
+- Updated src/components/tiktok/views/restricted-view.tsx submitPayment:
+  - POSTs to /api/payments → gets { attemptId, status: "pending" }.
+  - Transitions UI from "Submitting payment" → "Awaiting bank webhook".
+  - Polls GET /api/payments/[attemptId] every 800ms (up to 20 times = 16s window) until status="verified" or "rejected".
+  - On verified → transitions to "Payment verified!" success card.
+  - On rejected or timeout → toast error and returns to details stage.
+- Added NextAuth.js v4 setup:
+  - Created src/app/api/auth/[...nextauth]/route.ts with a CredentialsProvider that accepts any email + password (≥ 4 chars), find-or-creates the User row in Prisma, and exposes user.id in the JWT + session callbacks.
+  - Created src/components/auth-provider.tsx (SessionProvider wrapper).
+  - Wrapped the app in <AuthProvider> in src/app/layout.tsx (inside ThemeProvider).
+  - Created src/components/tiktok/auth-button.tsx with an AuthButton component:
+    - Loading state shows spinner.
+    - Logged-out state shows "Login" button that opens a Dialog with email/password inputs and a "Sign in / Create account" submit button.
+    - Logged-in state shows initials avatar + name + "Logout" button.
+    - Uses signIn("credentials", { redirect: false }) and signOut({ callbackUrl: "/" }).
+  - Removed the static "Login" button from TopBar and replaced it with <AuthButton />.
+- Added userId scoping to the data model:
+  - Added `userId String?` columns to SavedAudit, UnlockedProfile, and PaymentAttempt in prisma/schema.prisma.
+  - Ran `bun run db:push` to sync. Existing seed rows have userId=null (still visible to all users for backwards compat).
+  - Created src/lib/auth.ts with getAuthUserId() that returns the session's user.id (or null).
+  - Updated /api/audits GET to filter by `OR: [{ userId }, { userId: null }]` so logged-in users see their own audits + the seeded demo rows.
+  - Updated /api/audits POST to stamp the userId onto new audit rows.
+  - Updated /api/audits DELETE to forbid deleting rows that belong to a different user.
+  - Updated /api/payments POST to stamp userId onto the PaymentAttempt and propagate it through verifyPaymentInternal into UnlockedProfile.
+- Fixed the generateProfile function in src/lib/tiktok-data.ts:
+  - Tightened the followers range so eligible handles max out at ~9.6M (was up to 400M with the ×50 multiplier, which made likes overflow and produce negative numbers).
+  - Used Math.max(0, ...) on likes, views, and per-video likes so the recent-videos list never shows negative counts.
+  - Wrote scripts/clear-handle.cjs to clear CachedProfile + UnlockedProfile + PaymentAttempt rows for a handle so I could re-test the restricted flow on @prankzlife (which was unlocked in the previous session).
+- Browser-verified end-to-end:
+  1. Pre-login: TopBar shows "Login" button.
+  2. Click Login → modal opens with email/password inputs.
+  3. Submit "demo@budgetwise.app" / "demo123" → toast "Welcome", modal closes, TopBar shows "DE" avatar + "demo" name + "Logout" button.
+  4. /api/auth receives the credentials, find-or-creates the User row, returns a JWT.
+  5. Click Checker → @prankzlife → Run audit → profile detail with "View restrictions & pay to unlock" button (was reset to restricted).
+  6. Click "View restrictions" → restricted popup with bank details.
+  7. Paste "TXN-ASYNC-001" → click "Verify payment & unlock" → UI shows "Submitting payment" (1.2s) → "Awaiting bank webhook" (4s) → "Payment verified!" success card.
+- Dev log confirms the full async flow:
+  - POST /api/payments 201 → INSERT PaymentAttempt with status=pending and userId=<session user>.
+  - GET /api/payments/[id] polled 5 times (every 800ms) → all return status=pending.
+  - [webhook-sim] setTimeout fires at 4s → UPDATE PaymentAttempt status=verified + INSERT INTO UnlockedProfile.
+  - Final GET /api/payments/[id] returns status=verified → frontend transitions to success.
+- Re-polled Stitch for variants via list_screens: still 7 screens. REIMAGINE generation continues processing server-side.
+- Ran bun run lint: 0 errors, 1 cosmetic warning (unused eslint-disable in apply-view).
+
+Stage Summary:
+- Payment flow is now an async gateway pattern: user submits → pending row → bank webhook (simulated via setTimeout) verifies → frontend polls until confirmed. The /api/payments/webhook endpoint is wired exactly as a real bank would call it, so this can be replaced with a real Stripe/Plaid integration later without touching the frontend.
+- User accounts via NextAuth.js v4 (CredentialsProvider + JWT sessions). Any email + password ≥ 4 chars works (demo mode); User rows are find-or-created in Prisma. The TopBar shows the current user with a Logout button when signed in.
+- Data is now scoped per user: SavedAudit, UnlockedProfile, and PaymentAttempt all carry an optional userId. Logged-in users see their own audits + the seeded demo rows. Deletes are forbidden cross-user.
+- 9 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{19..27}-*.png covering pre-login, login modal, logged-in state, fresh restricted popup, async submit/await-webhook/verified stages.
+- Stitch variants: dispatched, still processing server-side; re-fetch when ready.
+- Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.

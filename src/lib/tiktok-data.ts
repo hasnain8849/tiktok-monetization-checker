@@ -207,8 +207,8 @@ export function generateProfile(handle: string): Profile {
     ? range(h >> 2, 30_000, 250_000)
     : ineligible
       ? range(h >> 3, 500, 9_500)
-      : range(h >> 4, 12_000, 8_000_000) * (h % 3 === 0 ? 50 : 1);
-  const likes = Math.floor(followers * (8 + (h % 20)));
+      : range(h >> 4, 12_000, 1_200_000) * (h % 3 === 0 ? 8 : 1);
+  const likes = Math.floor(Math.max(0, followers) * (8 + (h % 20)));
   const videos = range(h >> 5, 12, 480);
   const following = range(h >> 6, 80, 2400);
 
@@ -278,13 +278,17 @@ export function generateProfile(handle: string): Profile {
     category: pick(categories, h >> 10),
     engagementRate: Number((2 + (h % 150) / 10).toFixed(1)),
     avgViewsPerVideo: Math.floor(followers * (0.05 + (h % 30) / 100)),
-    recentVideos: Array.from({ length: 3 }, (_, i) => ({
-      id: `gen_${clean}_v${i}`,
-      title: ["first post this week", "throwback to last month", "tutorial: easy transition"][i],
-      views: Math.floor(followers * (0.02 + (h % 20) / 100)) - i * 1000,
-      likes: Math.floor(likes / (videos || 1) * 0.5) - i * 100,
-      postedDaysAgo: (i + 1) * 3 + (h % 4),
-    })),
+    recentVideos: Array.from({ length: 3 }, (_, i) => {
+      const vViews = Math.max(0, Math.floor(followers * (0.02 + (h % 20) / 100)) - i * 1000);
+      const vLikes = Math.max(0, Math.floor((likes / Math.max(1, videos)) * 0.5) - i * 100);
+      return {
+        id: `gen_${clean}_v${i}`,
+        title: ["first post this week", "throwback to last month", "tutorial: easy transition"][i],
+        views: vViews,
+        likes: vLikes,
+        postedDaysAgo: (i + 1) * 3 + (h % 4),
+      };
+    }),
   };
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getAuthUserId } from "@/lib/auth";
 
 // Bank account details shown to users who want to pay the unlock fee.
 // In a real app these would be a merchant bank account and the verification
@@ -23,14 +24,19 @@ type PaymentBody = {
 };
 
 export async function GET() {
-  // Return the bank details + fee for the front-end payment UI.
-  return NextResponse.json({
-    bank: BANK_DETAILS,
-  });
+  return NextResponse.json({ bank: BANK_DETAILS });
 }
 
+// POST creates a *pending* PaymentAttempt and schedules a simulated bank
+// webhook to fire ~4 seconds later, which flips the attempt to "verified"
+// and writes the UnlockedProfile row.
+//
+// In production this scheduling would not exist — the bank would call our
+// /api/payments/webhook endpoint asynchronously. We simulate it here so the
+// demo is self-contained.
 export async function POST(req: NextRequest) {
   try {
+    const userId = await getAuthUserId();
     const body = (await req.json()) as PaymentBody;
     if (!body?.handle || !body?.paymentRef) {
       return NextResponse.json(
@@ -41,43 +47,72 @@ export async function POST(req: NextRequest) {
     const handle = body.handle.trim().toLowerCase().replace(/^@/, "");
     const ref = body.paymentRef.trim();
 
-    // 1. Record the payment attempt.
     const attempt = await db.paymentAttempt.create({
       data: {
+        userId: userId ?? null,
         handle: `@${handle}`,
         amount: BANK_DETAILS.feeAmount,
         currency: BANK_DETAILS.currency,
         paymentRef: ref,
-        status: "verified", // auto-verify in demo mode
+        status: "pending",
       },
     });
 
-    // 2. Mark the profile as unlocked. The audit endpoint will see this row
-    //    and treat the profile as eligible on the next run.
-    await db.unlockedProfile.upsert({
-      where: { handle },
-      create: {
-        handle,
-        feeAmount: BANK_DETAILS.feeAmount,
-        currency: BANK_DETAILS.currency,
-        paymentMethod: "bank_transfer",
-        paymentRef: ref,
-      },
-      update: {
-        paymentRef: ref,
-        paidAt: new Date(),
-      },
-    });
+    // Simulate the bank webhook firing asynchronously. In production this
+    // would be an external POST to /api/payments/webhook from the bank's API.
+    setTimeout(async () => {
+      try {
+        await verifyPaymentInternal(attempt.id);
+        console.log(`[webhook-sim] Payment ${attempt.id} verified for @${handle}`);
+      } catch (e) {
+        console.error("[webhook-sim] failed:", e);
+      }
+    }, 4000);
 
     return NextResponse.json(
-      { ok: true, attemptId: attempt.id, verified: true },
+      { attemptId: attempt.id, status: "pending" },
       { status: 201 }
     );
   } catch (e) {
-    console.error("Payment failed:", e);
+    console.error("Payment creation failed:", e);
     return NextResponse.json(
-      { error: "payment verification failed" },
+      { error: "payment creation failed" },
       { status: 500 }
     );
   }
+}
+
+// Shared verification routine — used by both the simulated setTimeout and
+// the external /api/payments/webhook endpoint.
+export async function verifyPaymentInternal(attemptId: string) {
+  const attempt = await db.paymentAttempt.findUnique({
+    where: { id: attemptId },
+  });
+  if (!attempt) throw new Error("attempt not found");
+  if (attempt.status === "verified") return attempt;
+
+  await db.paymentAttempt.update({
+    where: { id: attemptId },
+    data: { status: "verified" },
+  });
+
+  const handle = attempt.handle.replace(/^@/, "").toLowerCase();
+  await db.unlockedProfile.upsert({
+    where: { handle },
+    create: {
+      handle,
+      userId: attempt.userId,
+      feeAmount: BANK_DETAILS.feeAmount,
+      currency: BANK_DETAILS.currency,
+      paymentMethod: "bank_transfer",
+      paymentRef: attempt.paymentRef,
+    },
+    update: {
+      userId: attempt.userId ?? undefined,
+      paymentRef: attempt.paymentRef,
+      paidAt: new Date(),
+    },
+  });
+
+  return attempt;
 }

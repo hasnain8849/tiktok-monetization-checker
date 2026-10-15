@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getAuthUserId } from "@/lib/auth";
 
-// GET /api/audits — list all saved audits, newest first
+// GET /api/audits — list all saved audits for the logged-in user (or all
+// audits if no session, for backwards compatibility with seeded data).
 export async function GET() {
+  const userId = await getAuthUserId();
   try {
+    const where = userId ? { OR: [{ userId }, { userId: null }] } : undefined;
     const audits = await db.savedAudit.findMany({
+      where,
       orderBy: { checkedAt: "desc" },
       take: 100,
     });
@@ -15,7 +20,7 @@ export async function GET() {
   }
 }
 
-// POST /api/audits — save a new audit
+// POST /api/audits — save a new audit (scoped to the logged-in user)
 type SaveAuditBody = {
   handle: string;
   avatarInitials: string;
@@ -27,6 +32,7 @@ type SaveAuditBody = {
 };
 
 export async function POST(req: NextRequest) {
+  const userId = await getAuthUserId();
   try {
     const body = (await req.json()) as SaveAuditBody;
     if (!body?.handle) {
@@ -34,6 +40,7 @@ export async function POST(req: NextRequest) {
     }
     const audit = await db.savedAudit.create({
       data: {
+        userId: userId ?? null,
         handle: body.handle,
         avatarInitials: body.avatarInitials ?? "??",
         followers: body.followers ?? 0,
@@ -50,11 +57,18 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/audits?id=... — delete one audit
+// DELETE /api/audits?id=...
 export async function DELETE(req: NextRequest) {
+  const userId = await getAuthUserId();
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   try {
+    // Allow delete only if the audit belongs to the user OR is unscoped
+    const audit = await db.savedAudit.findUnique({ where: { id } });
+    if (!audit) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (userId && audit.userId && audit.userId !== userId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
     await db.savedAudit.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (e) {

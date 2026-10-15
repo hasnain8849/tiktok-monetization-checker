@@ -56,6 +56,7 @@ model CachedProfile {
 // Audit history saved by the user from the dashboard.
 model SavedAudit {
   id              String   @id @default(cuid())
+  userId          String?
   handle          String
   avatarInitials  String
   followers       Int
@@ -71,6 +72,7 @@ model SavedAudit {
 model UnlockedProfile {
   id              String   @id @default(cuid())
   handle          String   @unique
+  userId          String?
   feeAmount       Float    @default(49.0)
   currency        String   @default("USD")
   paymentMethod    String   @default("bank_transfer")
@@ -82,6 +84,7 @@ model UnlockedProfile {
 model PaymentAttempt {
   id              String   @id @default(cuid())
   handle          String
+  userId          String?
   amount          Float
   currency        String   @default("USD")
   paymentRef      String

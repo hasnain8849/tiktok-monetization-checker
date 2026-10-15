@@ -72,10 +72,9 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
       return;
     }
     setStage("paying");
-    // Auto-verify after a short delay (mock bank confirmation webhook).
-    await new Promise((res) => setTimeout(res, 1200));
-    setStage("verifying");
     try {
+      // 1. Submit the payment → creates a *pending* PaymentAttempt and
+      //    schedules the simulated bank webhook to fire ~4 seconds later.
       const r = await fetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -85,16 +84,31 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
         }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      if (data.verified) {
-        setStage("done");
-        toast({
-          title: "Payment verified",
-          description: "Your restriction has been lifted. Re-run the audit.",
+      const data = (await r.json()) as { attemptId: string; status: string };
+      setStage("verifying");
+
+      // 2. Poll the attempt status until the webhook verifies it (or timeout).
+      const maxPolls = 20;
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((res) => setTimeout(res, 800));
+        const s = await fetch(`/api/payments/${data.attemptId}`, {
+          cache: "no-store",
         });
-      } else {
-        throw new Error("not verified");
+        if (!s.ok) continue;
+        const st = (await s.json()) as { status: string };
+        if (st.status === "verified") {
+          setStage("done");
+          toast({
+            title: "Payment verified",
+            description: "Your restriction has been lifted. Re-run the audit.",
+          });
+          return;
+        }
+        if (st.status === "rejected") {
+          throw new Error("rejected");
+        }
       }
+      throw new Error("verification timeout");
     } catch (e) {
       console.error(e);
       toast({
@@ -318,12 +332,12 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
                 </div>
               </div>
               <h3 className="text-lg font-bold text-white">
-                {stage === "paying" ? "Submitting payment" : "Verifying with bank"}
+                {stage === "paying" ? "Submitting payment" : "Awaiting bank webhook"}
               </h3>
               <p className="text-sm text-slate-400 max-w-md mx-auto">
                 {stage === "paying"
-                  ? "Recording your payment reference against the unlock ledger..."
-                  : "Cross-checking the reference against our banking partner. This usually takes a few seconds."}
+                  ? "Recording your payment reference and notifying our banking partner..."
+                  : "Waiting for the bank webhook to confirm your transfer. This usually takes a few seconds."}
               </p>
             </div>
           )}

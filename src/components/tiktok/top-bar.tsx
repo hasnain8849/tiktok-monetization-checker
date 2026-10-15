@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Home, Search, BarChart3, Bell, LogIn, Sparkles } from "lucide-react";
+import { Home, Search, BarChart3, Bell, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AuthButton } from "@/components/tiktok/auth-button";
 import { cn } from "@/lib/utils";
 
 export type ViewKey =
@@ -93,14 +94,7 @@ export function TopBar({ active, onNavigate, search, onSearch }: TopBarProps) {
         )}
 
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="hidden sm:inline-flex text-slate-300 hover:text-white"
-          >
-            <LogIn className="h-4 w-4" />
-            Login
-          </Button>
+          <AuthButton />
           <Button
             size="sm"
             className="gradient-btn-primary text-white font-semibold rounded-full shadow-lg shadow-[#fe2c55]/20 hover:shadow-[#fe2c55]/40 transition duration-200 border-0"
