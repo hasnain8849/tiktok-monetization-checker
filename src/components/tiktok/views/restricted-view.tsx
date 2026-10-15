@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { io as ioClient, type Socket } from "socket.io-client";
 import {
   AlertTriangle,
   X,
@@ -47,7 +48,53 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
   const [stage, setStage] = React.useState<Stage>("details");
   const [paymentRef, setPaymentRef] = React.useState("");
   const [copied, setCopied] = React.useState<string | null>(null);
+  const socketRef = React.useRef<Socket | null>(null);
   const { toast } = useToast();
+
+  // Subscribe to the payment-notifier websocket for this profile's handle.
+  // When a payment-update arrives (via the bank webhook OR admin verify),
+  // we transition the stage instantly without waiting for the next poll.
+  React.useEffect(() => {
+    const handle = profile.handle.replace(/^@/, "").toLowerCase();
+    const socket = ioClient("/?XTransformPort=3003", {
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 3,
+      timeout: 5000,
+    });
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      socket.emit("subscribe", { handle });
+      console.log(`[ws] subscribed for ${handle}`);
+    });
+    socket.on("payment-update", (data: { handle: string; status: string; attemptId?: string }) => {
+      console.log(`[ws] payment-update for ${data.handle} status=${data.status}`);
+      if (data.status === "verified") {
+        setStage("done");
+        toast({
+          title: "Payment verified",
+          description: "Your restriction has been lifted. Re-run the audit.",
+        });
+      } else if (data.status === "rejected") {
+        setStage("details");
+        toast({
+          title: "Payment rejected",
+          description: "An admin rejected your payment. Please contact support.",
+          variant: "destructive",
+        });
+      }
+    });
+    socket.on("connect_error", (err: Error) => {
+      console.warn("[ws] connect error:", err.message);
+    });
+
+    return () => {
+      socket.emit("unsubscribe", { handle });
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [profile.handle, toast]);
 
   React.useEffect(() => {
     fetch("/api/payments")

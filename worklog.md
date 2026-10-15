@@ -311,3 +311,54 @@ Stage Summary:
 - 10 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{28..37}-*.png covering pre-login, signup with existing email error, admin login, admin view empty + with pending payments, manual verify, manual reject.
 - Stitch variants: dispatched, still processing server-side; re-fetch when ready.
 - Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.
+
+---
+Task ID: audit-log-settings-websocket-8
+Agent: main
+Task: Continue all next steps: admin audit log (track who verified/rejected which payment), account settings page (change name + password), real-time WebSocket for instant unlock notification, re-poll Stitch.
+
+Work Log:
+- Added AuditLog Prisma model (id, actorEmail, action, targetType, targetId, targetHandle, metadata JSON, createdAt). Pushed to SQLite.
+- Created src/lib/audit.ts with recordAudit() helper that pulls the session email from the session and inserts an audit log row.
+- Updated /api/admin/payments/[id] PATCH to call recordAudit() on both verify and reject paths, capturing the actor's email, action, target handle, and metadata (paymentRef, amount, currency, previousStatus, verifiedBy/rejectedBy).
+- Created GET /api/admin/audit-log endpoint (admin-only, returns last 200 entries newest-first).
+- Rewrote src/components/tiktok/views/admin-view.tsx into a 2-tab component (Payments / Audit Log). Audit Log table shows actor email, action badge (color-coded by action type), target (type + id + handle), metadata (first 4 JSON keys rendered as key: value lines), and timestamp with seconds.
+- Created /api/account GET (returns the logged-in user's profile: id, email, name, role, createdAt) and PATCH (updates name and/or password).
+  - PATCH validates name length 1–80.
+  - Password change requires currentPassword (verified with bcrypt.compare against the stored hash), enforces new password ≥ 8 chars + ≥ 1 digit, then bcrypt-hashes and updates.
+  - Records "settings_update" audit entry with the list of changed fields.
+- Built src/components/tiktok/views/settings-view.tsx with three sections: profile card (avatar + name + email + role badge + join date), name form (single input + Save button, disabled when unchanged), password form (current + new password inputs + Change button, disabled when empty). Inline error box shows server error messages.
+- Wired settings screen into page.tsx (new "settings" Screen kind + goSettings callback) and TopBar (new onSettingsNavigate prop forwarded to AuthButton). Settings button appears in the TopBar next to the avatar for any logged-in user (not just admin).
+- Set up WebSocket mini-service at /home/z/my-project/mini-services/payment-notifier/:
+  - index.ts implements both a socket.io server (clients connect to "/?XTransformPort=3003" per the fullstack-dev skill's gateway convention) and an HTTP POST endpoint at /broadcast on the same port.
+  - Clients emit "subscribe" with {handle} to join a room "wait:<handle>". When the Next.js app POSTs to /broadcast with {handle, status, attemptId}, the server fans out a "payment-update" event to all sockets in "wait:<handle>".
+  - Started the mini-service with `bun --hot` (PID kept alive via nohup).
+- Installed socket.io-client in the Next.js project.
+- Created src/lib/notify.ts with notifyPaymentUpdate({handle, status, attemptId}) — fire-and-forget POST to http://localhost:3003/broadcast. Failures are logged but never throw (the frontend polling is the fallback).
+- Wired notifyPaymentUpdate into:
+  - verifyPaymentInternal() in /api/payments/route.ts — fires after the simulated bank webhook verifies a payment.
+  - /api/admin/payments/[id] PATCH on both verify and reject paths.
+- Updated src/components/tiktok/views/restricted-view.tsx to subscribe to the WebSocket on mount:
+  - useEffect opens a socket.io connection to "/?XTransformPort=3003", emits "subscribe" with the profile's handle, listens for "payment-update" events.
+  - On status="verified" → instantly transitions to "done" stage + shows the "Payment verified!" success card.
+  - On status="rejected" → transitions back to "details" stage + shows a destructive toast.
+  - On unmount → emits "unsubscribe" + disconnects.
+- Installed socket.io-client, ran lint: 0 errors, 1 cosmetic warning. Fixed an additional lint error (JSX-in-try-catch in MetadataCell) by hoisting the JSON parse outside the JSX.
+- Browser-verified end-to-end:
+  1. Settings view: name update (Owner → Owner Kim) — saved to DB, confirmed via `node scripts/user-admin.cjs list` showing `name=Owner Kim`.
+  2. Password change with wrong current password → "Current password is incorrect" inline error.
+  3. Password change with correct current password (admin123) → new password (newpass456) → "Password changed" toast, fields cleared.
+  4. Logout → login with OLD password → "Incorrect password" error.
+  5. Login with NEW password → succeeded, TopBar shows OW avatar + Settings + Admin buttons.
+  6. Admin → Audit Log tab → showed 3 entries: verify_payment (TXN-WS-001), settings_update (password), settings_update (name), each with actor email (owner@admin.local) + metadata.
+  7. WebSocket instant notification: triggered payment TXN-WS-001 → frontend shows "Awaiting bank webhook" → POSTed to /api/admin/payments/[id] with action=verify → frontend instantly transitioned to "Payment verified!" success card (no polling delay).
+- Dev log confirms the PATCH returned 200 + verifyPaymentInternal fired + notifyPaymentUpdate broadcast.
+- Re-polled Stitch for variants: still 7 screens, REIMAGINE generation continues processing server-side.
+
+Stage Summary:
+- Admin actions are now auditable: every verify/reject records actor email, action, target handle/id, and structured metadata (previous status, payment ref, amount, currency, verified/rejected by). Visible in the new "Audit Log" tab in the admin view.
+- Users can change their display name and password via the new Settings page at /settings-equivalent. Password changes require bcrypt verification of the current password, enforce ≥ 8 chars + ≥ 1 digit, and re-hash with bcrypt.
+- Real-time unlock: when an admin (or the simulated bank webhook) verifies a payment, the user's restricted popup instantly transitions to the "Payment verified!" success card via WebSocket, with no polling delay. The mini-service at /home/z/my-project/mini-services/payment-notifier runs on port 3003 and broadcasts via socket.io.
+- 10 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{38..47}-*.png covering settings view, name change, password change, old/new password login, audit log table, websocket awaiting + instant verify transition.
+- Stitch variants: dispatched, still processing server-side; re-fetch when ready.
+- Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.

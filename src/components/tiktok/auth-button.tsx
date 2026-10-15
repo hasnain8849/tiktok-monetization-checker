@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
-import { LogIn, LogOut, Loader2, User as UserIcon, Shield } from "lucide-react";
+import { LogIn, LogOut, Loader2, User as UserIcon, Shield, Settings as SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,9 +17,10 @@ import { useToast } from "@/hooks/use-toast";
 
 interface AuthButtonProps {
   onAdminNavigate?: () => void;
+  onSettingsNavigate?: () => void;
 }
 
-export function AuthButton({ onAdminNavigate }: AuthButtonProps) {
+export function AuthButton({ onAdminNavigate, onSettingsNavigate }: AuthButtonProps) {
   const { data: session, status } = useSession();
   const [open, setOpen] = React.useState(false);
   const { toast } = useToast();
@@ -40,6 +41,18 @@ export function AuthButton({ onAdminNavigate }: AuthButtonProps) {
     const isAdmin = role === "admin";
     return (
       <div className="flex items-center gap-2">
+        {onSettingsNavigate && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSettingsNavigate}
+            className="text-slate-300 hover:text-white hover:bg-slate-800"
+            title="Settings"
+          >
+            <SettingsIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Settings</span>
+          </Button>
+        )}
         {isAdmin && onAdminNavigate && (
           <Button
             variant="ghost"

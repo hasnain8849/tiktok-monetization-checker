@@ -23,6 +23,7 @@ interface TopBarProps {
   search?: string;
   onSearch?: (v: string) => void;
   onAdminNavigate?: () => void;
+  onSettingsNavigate?: () => void;
 }
 
 const navLinks: { key: ViewKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -39,7 +40,7 @@ export function TikTokMark() {
   );
 }
 
-export function TopBar({ active, onNavigate, search, onSearch, onAdminNavigate }: TopBarProps) {
+export function TopBar({ active, onNavigate, search, onSearch, onAdminNavigate, onSettingsNavigate }: TopBarProps) {
   return (
     <header className="w-full border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
@@ -95,7 +96,10 @@ export function TopBar({ active, onNavigate, search, onSearch, onAdminNavigate }
         )}
 
         <div className="flex items-center gap-3">
-          <AuthButton onAdminNavigate={onAdminNavigate} />
+          <AuthButton
+            onAdminNavigate={onAdminNavigate}
+            onSettingsNavigate={onSettingsNavigate}
+          />
           <Button
             size="sm"
             className="gradient-btn-primary text-white font-semibold rounded-full shadow-lg shadow-[#fe2c55]/20 hover:shadow-[#fe2c55]/40 transition duration-200 border-0"

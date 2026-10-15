@@ -9,6 +9,7 @@ import { RestrictedView } from "@/components/tiktok/views/restricted-view";
 import { ProfileDetailView } from "@/components/tiktok/views/profile-detail-view";
 import { DashboardView } from "@/components/tiktok/views/dashboard-view";
 import { AdminView } from "@/components/tiktok/views/admin-view";
+import { SettingsView } from "@/components/tiktok/views/settings-view";
 import { type Profile } from "@/lib/tiktok-data";
 
 type Screen =
@@ -18,7 +19,8 @@ type Screen =
   | { kind: "apply"; profile: Profile }
   | { kind: "restricted"; profile: Profile }
   | { kind: "dashboard" }
-  | { kind: "admin" };
+  | { kind: "admin" }
+  | { kind: "settings" };
 
 // ViewKey adds an "admin" type that is only shown when the session user is an admin.
 export type AppViewKey = ViewKey | "admin";
@@ -26,8 +28,9 @@ export type AppViewKey = ViewKey | "admin";
 export default function Home() {
   const [screen, setScreen] = React.useState<Screen>({ kind: "landing" });
   const [search, setSearch] = React.useState("");
-  // Callback for AuthButton to navigate to the admin screen.
+  // Callbacks for AuthButton to navigate to admin / settings screens.
   const goAdmin = React.useCallback(() => setScreen({ kind: "admin" }), []);
+  const goSettings = React.useCallback(() => setScreen({ kind: "settings" }), []);
 
   const navigate = (v: ViewKey) => {
     if (v === "landing") setScreen({ kind: "landing" });
@@ -59,6 +62,7 @@ export default function Home() {
         search={search}
         onSearch={setSearch}
         onAdminNavigate={goAdmin}
+        onSettingsNavigate={goSettings}
       />
       <main className="flex-1">
         {screen.kind === "landing" && (
@@ -113,6 +117,9 @@ export default function Home() {
         )}
         {screen.kind === "admin" && (
           <AdminView onBack={() => setScreen({ kind: "landing" })} />
+        )}
+        {screen.kind === "settings" && (
+          <SettingsView onBack={() => setScreen({ kind: "landing" })} />
         )}
       </main>
       <Footer onNavigate={navigate} />

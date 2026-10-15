@@ -93,3 +93,16 @@ model PaymentAttempt {
   status          String   @default("pending") // pending | verified | rejected
   createdAt       DateTime @default(now())
 }
+
+// Audit log — every admin action (verify / reject / promote) is recorded here
+// with the actor's email, the action taken, and the target (handle / userId).
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorEmail  String   // who performed the action
+  action      String   // "verify_payment" | "reject_payment" | "promote_user" | ...
+  targetType  String   // "payment" | "user" | ...
+  targetId    String?  // the resource id (PaymentAttempt.id, User.id, ...)
+  targetHandle String? // for payments, the handle being unlocked
+  metadata    String   @default("{}") // JSON blob for extra context
+  createdAt   DateTime @default(now())
+}

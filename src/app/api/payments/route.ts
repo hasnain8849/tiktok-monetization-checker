@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthUserId } from "@/lib/auth";
+import { notifyPaymentUpdate } from "@/lib/notify";
 
 // Bank account details shown to users who want to pay the unlock fee.
 // In a real app these would be a merchant bank account and the verification
@@ -114,6 +115,14 @@ export async function verifyPaymentInternal(attemptId: string) {
       paymentRef: attempt.paymentRef,
       paidAt: new Date(),
     },
+  });
+
+  // Notify the websocket service so any client waiting on this handle
+  // (e.g. the restricted popup) transitions instantly.
+  await notifyPaymentUpdate({
+    handle,
+    status: "verified",
+    attemptId,
   });
 
   return attempt;
