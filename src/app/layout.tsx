@@ -1,24 +1,25 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 
-const geistSans = Geist({
+const inter = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
   subsets: ["latin"],
+  weight: ["600", "700", "800"],
 });
 
 export const metadata: Metadata = {
-  title: "BudgetWise — Personal Finance Dashboard",
-  description: "Track spending, monitor accounts, and grow savings with BudgetWise, a clean personal finance dashboard built with Next.js, Tailwind, and shadcn/ui.",
-  keywords: ["budget", "finance", "personal finance", "dashboard", "Next.js", "shadcn/ui"],
-  authors: [{ name: "BudgetWise" }],
+  title: "TikTok Monetization Checker — Check Your Eligibility",
+  description: "Enter your TikTok username or profile URL to check your followers, likes, and monetization eligibility with the 2026 Creator Rewards Program algorithm.",
+  keywords: ["tiktok", "monetization", "creator", "eligibility", "followers", "creator rewards"],
+  authors: [{ name: "TikTok Monetization Checker" }],
 };
 
 export default function RootLayout({
@@ -27,14 +28,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground min-h-screen`}
+        className={`${inter.variable} ${jakarta.variable} antialiased bg-background text-foreground min-h-screen`}
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
-          enableSystem
+          defaultTheme="dark"
+          enableSystem={false}
           disableTransitionOnChange
         >
           {children}

@@ -37,6 +37,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-brand-cyan: var(--brand-cyan);
+  --color-brand-magenta: var(--brand-magenta);
+  --color-brand-green: var(--brand-green);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-card: var(--brand-card);
+  --color-brand-card-border: var(--brand-card-border);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -44,72 +50,81 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* TikTok Monetization Checker brand palette — dark navy + cyan/magenta gradient */
+  --radius: 0.75rem;
+  --background: #060b13;
+  --foreground: #e1e2ed;
+  --card: #0d1626;
+  --card-foreground: #e1e2ed;
+  --popover: #0d1626;
+  --popover-foreground: #e1e2ed;
+  --primary: #00f2fe;
+  --primary-foreground: #060b13;
+  --secondary: #111c2e;
+  --secondary-foreground: #e1e2ed;
+  --muted: #0b1320;
+  --muted-foreground: #94a3b8;
+  --accent: #fe2c55;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --border: #1a2942;
+  --input: #080e19;
+  --ring: #00f2fe;
+  --chart-1: #00f2fe;
+  --chart-2: #fe2c55;
+  --chart-3: #10b981;
+  --chart-4: #4facfe;
+  --chart-5: #f59e0b;
+  --sidebar: #080e1a;
+  --sidebar-foreground: #e1e2ed;
+  --sidebar-primary: #00f2fe;
+  --sidebar-primary-foreground: #060b13;
+  --sidebar-accent: #111c2e;
+  --sidebar-accent-foreground: #e1e2ed;
+  --sidebar-border: #1a2942;
+  --sidebar-ring: #00f2fe;
+  /* Brand tokens */
+  --brand-cyan: #00f2fe;
+  --brand-magenta: #fe2c55;
+  --brand-green: #10b981;
+  --brand-dark: #060b13;
+  --brand-card: #0d1626;
+  --brand-card-border: #1a2942;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Dark mode is the default; expose a slightly deeper palette if user explicitly toggles */
+  --background: #04080e;
+  --foreground: #e1e2ed;
+  --card: #0a111e;
+  --card-foreground: #e1e2ed;
+  --popover: #0a111e;
+  --popover-foreground: #e1e2ed;
+  --primary: #00f2fe;
+  --primary-foreground: #04080e;
+  --secondary: #0e1726;
+  --secondary-foreground: #e1e2ed;
+  --muted: #060b13;
+  --muted-foreground: #94a3b8;
+  --accent: #fe2c55;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --border: #16223a;
+  --input: #04080e;
+  --ring: #00f2fe;
+  --chart-1: #00f2fe;
+  --chart-2: #fe2c55;
+  --chart-3: #10b981;
+  --chart-4: #4facfe;
+  --chart-5: #f59e0b;
+  --sidebar: #04080e;
+  --sidebar-foreground: #e1e2ed;
+  --sidebar-primary: #00f2fe;
+  --sidebar-primary-foreground: #04080e;
+  --sidebar-accent: #0e1726;
+  --sidebar-accent-foreground: #e1e2ed;
+  --sidebar-border: #16223a;
+  --sidebar-ring: #00f2fe;
 }
 
 @layer base {
@@ -118,5 +133,43 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at 25% 10%, rgba(0, 242, 254, 0.08), transparent 40%),
+      radial-gradient(circle at 80% 30%, rgba(254, 44, 85, 0.08), transparent 45%),
+      radial-gradient(circle at 50% 100%, rgba(0, 100, 255, 0.06), transparent 40%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .gradient-text-hero {
+    background: linear-gradient(135deg, #00f2fe 0%, #4facfe 35%, #fe2c55 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .gradient-btn-primary {
+    background: linear-gradient(90deg, #fe2c55 0%, #ff527b 45%, #00f2fe 100%);
+    transition: all 0.3s ease;
+  }
+  .gradient-btn-primary:hover {
+    opacity: 0.95;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px -4px rgba(254, 44, 85, 0.45);
+  }
+  .glass-panel {
+    background: rgba(13, 22, 38, 0.75);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .glass-input-box {
+    background: rgba(8, 14, 25, 0.85);
+    border: 1px solid rgba(34, 53, 82, 0.8);
+  }
+  .glow-cyan {
+    box-shadow: 0 0 25px -5px rgba(0, 242, 254, 0.4);
+  }
+  .glow-magenta {
+    box-shadow: 0 0 25px -5px rgba(254, 44, 85, 0.4);
   }
 }
