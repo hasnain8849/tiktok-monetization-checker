@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
-import { LogIn, LogOut, Loader2, User as UserIcon, X } from "lucide-react";
+import { LogIn, LogOut, Loader2, User as UserIcon, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
-export function AuthButton() {
+interface AuthButtonProps {
+  onAdminNavigate?: () => void;
+}
+
+export function AuthButton({ onAdminNavigate }: AuthButtonProps) {
   const { data: session, status } = useSession();
   const [open, setOpen] = React.useState(false);
   const { toast } = useToast();
@@ -32,8 +36,22 @@ export function AuthButton() {
   if (session?.user) {
     const name = session.user.name ?? session.user.email ?? "User";
     const initials = name.slice(0, 2).toUpperCase();
+    const role = (session.user as { role?: string }).role ?? "user";
+    const isAdmin = role === "admin";
     return (
       <div className="flex items-center gap-2">
+        {isAdmin && onAdminNavigate && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onAdminNavigate}
+            className="text-cyan-300 hover:text-cyan-200 hover:bg-cyan-500/10"
+            title="Admin console"
+          >
+            <Shield className="h-4 w-4" />
+            <span className="hidden sm:inline">Admin</span>
+          </Button>
+        )}
         <div className="hidden sm:flex items-center gap-2 text-xs text-slate-300">
           <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-[#00f2fe] to-[#fe2c55] flex items-center justify-center text-white text-[10px] font-bold">
             {initials}
@@ -64,55 +82,69 @@ export function AuthButton() {
         <LogIn className="h-4 w-4" />
         Login
       </Button>
-      <LoginDialog open={open} onClose={() => setOpen(false)} toast={toast} />
+      <AuthDialog open={open} onClose={() => setOpen(false)} toast={toast} />
     </>
   );
 }
 
-function LoginDialog({
-  open,
-  onClose,
-  toast,
-}: {
+interface AuthDialogProps {
   open: boolean;
   onClose: () => void;
   toast: ReturnType<typeof useToast>["toast"];
-}) {
+}
+
+function AuthDialog({ open, onClose, toast }: AuthDialogProps) {
+  const [mode, setMode] = React.useState<"login" | "signup">("login");
+  const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     if (!email.trim() || !password.trim()) {
-      toast({
-        title: "Missing credentials",
-        description: "Email and password are required.",
-        variant: "destructive",
-      });
+      setError("Email and password are required");
+      return;
+    }
+    if (mode === "signup" && password.trim().length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    if (mode === "signup" && !/\d/.test(password.trim())) {
+      setError("Password must contain at least one digit");
       return;
     }
     setLoading(true);
     const res = await signIn("credentials", {
       email: email.trim(),
       password: password.trim(),
+      action: mode === "signup" ? "signup" : "login",
+      name: mode === "signup" ? name.trim() : "",
       redirect: false,
     });
     setLoading(false);
     if (res?.error) {
+      setError(res.error);
       toast({
-        title: "Login failed",
+        title: mode === "signup" ? "Signup failed" : "Login failed",
         description: res.error,
         variant: "destructive",
       });
       return;
     }
     toast({
-      title: "Welcome",
-      description: `Logged in as ${email.trim()}`,
+      title: mode === "signup" ? "Account created" : "Welcome back",
+      description:
+        mode === "signup"
+          ? `Account ${email.trim()} created. You are now logged in.`
+          : `Logged in as ${email.trim()}`,
     });
+    setName("");
     setEmail("");
     setPassword("");
+    setError(null);
     onClose();
   };
 
@@ -120,24 +152,62 @@ function LoginDialog({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="glass-panel border-slate-700 bg-[#0d1626] text-slate-100 max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-white flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <UserIcon className="w-5 h-5 text-cyan-400" />
-              Sign in to BudgetWise
-            </span>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <UserIcon className="w-5 h-5 text-cyan-400" />
+            {mode === "login" ? "Sign in" : "Create account"}
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            Demo mode — any email + password (≥ 4 chars) works. Your audits
-            and unlocks will be saved to your account.
+            {mode === "login"
+              ? "Use your email and password to access your saved audits and unlocks."
+              : "New accounts auto-create on first signup. Passwords must be ≥ 8 chars with at least one digit. Emails ending in @admin.local get admin privileges (demo)."}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Mode toggle */}
+        <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-md mb-4">
+          {(["login", "signup"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                setMode(m);
+                setError(null);
+              }}
+              className={
+                "py-2 text-sm font-medium rounded transition-colors " +
+                (mode === m
+                  ? "bg-background shadow-sm text-white"
+                  : "text-slate-400 hover:text-white")
+              }
+            >
+              {m === "login" ? "Log in" : "Sign up"}
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={submit} className="space-y-4">
+          {mode === "signup" && (
+            <div className="space-y-2">
+              <Label htmlFor="auth-name" className="text-slate-200">
+                Name
+              </Label>
+              <Input
+                id="auth-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Alex Kim"
+                autoComplete="name"
+                className="glass-input-box text-slate-100 placeholder-slate-500 border-0 focus-visible:ring-1 focus-visible:ring-[#00f2fe]"
+              />
+            </div>
+          )}
           <div className="space-y-2">
-            <Label htmlFor="login-email" className="text-slate-200">
+            <Label htmlFor="auth-email" className="text-slate-200">
               Email
             </Label>
             <Input
-              id="login-email"
+              id="auth-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -148,20 +218,27 @@ function LoginDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="login-pwd" className="text-slate-200">
+            <Label htmlFor="auth-pwd" className="text-slate-200">
               Password
             </Label>
             <Input
-              id="login-pwd"
+              id="auth-pwd"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 4 characters"
-              autoComplete="current-password"
+              placeholder={mode === "signup" ? "At least 8 chars + a digit" : "Your password"}
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
               required
               className="glass-input-box text-slate-100 placeholder-slate-500 border-0 focus-visible:ring-1 focus-visible:ring-[#00f2fe]"
             />
           </div>
+
+          {error && (
+            <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+              {error}
+            </div>
+          )}
+
           <Button
             type="submit"
             disabled={loading}
@@ -170,14 +247,43 @@ function LoginDialog({
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Signing in...
+                {mode === "signup" ? "Creating account..." : "Signing in..."}
               </>
             ) : (
-              "Sign in / Create account"
+              mode === "signup" ? "Create account" : "Sign in"
             )}
           </Button>
+
           <p className="text-xs text-slate-500 text-center">
-            No signup required — new emails are auto-registered.
+            {mode === "login" ? (
+              <>
+                No account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signup");
+                    setError(null);
+                  }}
+                  className="text-cyan-400 hover:underline"
+                >
+                  Sign up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setError(null);
+                  }}
+                  className="text-cyan-400 hover:underline"
+                >
+                  Log in
+                </button>
+              </>
+            )}
           </p>
         </form>
       </DialogContent>

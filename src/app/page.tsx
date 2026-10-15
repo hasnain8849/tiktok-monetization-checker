@@ -8,7 +8,8 @@ import { ApplyView } from "@/components/tiktok/views/apply-view";
 import { RestrictedView } from "@/components/tiktok/views/restricted-view";
 import { ProfileDetailView } from "@/components/tiktok/views/profile-detail-view";
 import { DashboardView } from "@/components/tiktok/views/dashboard-view";
-import { findProfile, type Profile } from "@/lib/tiktok-data";
+import { AdminView } from "@/components/tiktok/views/admin-view";
+import { type Profile } from "@/lib/tiktok-data";
 
 type Screen =
   | { kind: "landing" }
@@ -16,11 +17,17 @@ type Screen =
   | { kind: "profile-detail"; profile: Profile }
   | { kind: "apply"; profile: Profile }
   | { kind: "restricted"; profile: Profile }
-  | { kind: "dashboard" };
+  | { kind: "dashboard" }
+  | { kind: "admin" };
+
+// ViewKey adds an "admin" type that is only shown when the session user is an admin.
+export type AppViewKey = ViewKey | "admin";
 
 export default function Home() {
   const [screen, setScreen] = React.useState<Screen>({ kind: "landing" });
   const [search, setSearch] = React.useState("");
+  // Callback for AuthButton to navigate to the admin screen.
+  const goAdmin = React.useCallback(() => setScreen({ kind: "admin" }), []);
 
   const navigate = (v: ViewKey) => {
     if (v === "landing") setScreen({ kind: "landing" });
@@ -40,7 +47,9 @@ export default function Home() {
             ? "checker"
             : screen.kind === "restricted"
               ? "checker"
-              : "dashboard";
+              : screen.kind === "admin"
+                ? "dashboard"
+                : "dashboard";
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -49,6 +58,7 @@ export default function Home() {
         onNavigate={navigate}
         search={search}
         onSearch={setSearch}
+        onAdminNavigate={goAdmin}
       />
       <main className="flex-1">
         {screen.kind === "landing" && (
@@ -100,6 +110,9 @@ export default function Home() {
               setScreen({ kind: "checker", initialHandle: handle })
             }
           />
+        )}
+        {screen.kind === "admin" && (
+          <AdminView onBack={() => setScreen({ kind: "landing" })} />
         )}
       </main>
       <Footer onNavigate={navigate} />

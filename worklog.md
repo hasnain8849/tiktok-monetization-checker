@@ -240,3 +240,74 @@ Stage Summary:
 - 9 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{19..27}-*.png covering pre-login, login modal, logged-in state, fresh restricted popup, async submit/await-webhook/verified stages.
 - Stitch variants: dispatched, still processing server-side; re-fetch when ready.
 - Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.
+
+---
+Task ID: admin-and-bcrypt-7
+Agent: main
+Task: Continue all next steps: add password hashing + email/password validation, build admin view for manually verifying/rejecting pending payments, and re-poll Stitch for variants.
+
+Work Log:
+- Installed bcryptjs (pure-JS bcrypt) + @types/bcryptjs.
+- Extended Prisma User model with `password String?` (bcrypt hash) and `role String @default("user")`. Pushed to SQLite via `bun run db:push`.
+- Rewrote /api/auth/[...nextauth]/route.ts:
+  - Email validation regex (RFC-style).
+  - Password validation: ≥ 8 chars + ≥ 1 digit.
+  - Credentials provider now supports both login and signup via a single endpoint. The `action` credential field selects between them ("login" | "signup").
+  - Signup path: validate email + password, check for existing user (returns "Email already registered — try logging in"), hash with bcrypt (10 rounds), create User row with role="user" (or "admin" if email ends with @admin.local).
+  - Login path: validate email format, find User by email, verify password with bcrypt.compare; if no user found or no password set, returns "Email not registered or no password set — sign up instead"; if hash mismatch, returns "Incorrect password".
+  - JWT + session callbacks now expose `id`, `email`, and `role`.
+- Updated src/lib/auth.ts with getSessionInfo() returning {userId, email, role}, getAuthUserId(), and requireAdmin() (returns null if role ≠ admin).
+- Rewrote src/components/tiktok/auth-button.tsx with a tabbed Login/Signup dialog:
+  - Mode toggle (Log in / Sign up) at the top of the dialog.
+  - Signup shows an extra Name field.
+  - Inline error box below inputs (replaces toast-only errors).
+  - Client-side password validation matches server (≥ 8 chars + digit) for instant feedback.
+  - Logged-in view shows initials avatar + name + Admin button (only if role=admin) + Logout button.
+- Created /api/admin/payments GET endpoint:
+  - Requires `requireAdmin()` — returns 403 if not signed in or not admin.
+  - Supports ?status=pending|verified|rejected filter.
+  - Returns last 200 attempts ordered by createdAt desc.
+- Created /api/admin/payments/[id] PATCH endpoint:
+  - Admin-only.
+  - Body: { action: "verify" | "reject" }.
+  - "verify" reuses verifyPaymentInternal() (from /api/payments/route.ts) to mark the attempt as verified AND write the UnlockedProfile row — same path as the simulated bank webhook.
+  - "reject" just updates the attempt status to "rejected".
+- Created src/components/tiktok/views/admin-view.tsx:
+  - Admin header with ShieldCheck icon.
+  - 4-tab status filter: All, Pending, Verified, Rejected (with counts).
+  - Table of payment attempts: handle, paymentRef, amount, user (last 6 chars of userId), status badge, createdAt timestamp, and Verify/Reject buttons on pending rows.
+  - Status badges (Pending/Verified/Rejected) with colored chips.
+  - "How admin access works" info card explaining the @admin.local convention.
+  - Refresh button + loading state.
+  - Redirects to landing with a toast if /api/admin/payments returns 403 (for users who manually navigate to the admin screen without admin role).
+- Wired admin view into src/app/page.tsx:
+  - Added "admin" to the Screen type.
+  - Added `goAdmin` callback that sets screen.kind="admin".
+  - Passed `onAdminNavigate={goAdmin}` to TopBar.
+  - TopBar passes it through to <AuthButton onAdminNavigate={...} />.
+- Updated TopBar interface to accept `onAdminNavigate?: () => void`.
+- Updated src/components/tiktok/top-bar.tsx to forward onAdminNavigate to AuthButton.
+- Added NEXTAUTH_SECRET env var (stable, 64-char hex string) + NEXTAUTH_URL=http://localhost:3000 to .env. Without NEXTAUTH_SECRET, NextAuth v4 generates a random secret per restart, which invalidates existing session cookies and throws JWEDecryptionFailed on the next request — that was breaking the admin endpoint with 403.
+- Bumped the simulated bank webhook delay from 4s to 30s in /api/payments/route.ts so admins have time to manually verify via the admin UI before the simulated webhook fires. Updated the restricted-view poll window from 16s (20 × 800ms) to 48s (60 × 800ms) to accommodate the longer webhook delay.
+- Wrote scripts/user-admin.cjs for inspecting/cleaning/promoting users. Used `wipe` to delete the old passwordless demo@budgetwise.app user so the new bcrypt-based login flow could be tested cleanly.
+- Browser-verified end-to-end:
+  1. Pre-login: TopBar shows "Login" button.
+  2. Click Login → dialog opens → switch to Sign up tab.
+  3. Fill "Owner / owner@admin.local / admin123" → click Create account → toast "Account created", TopBar shows OW avatar + Owner name + Admin button + Logout.
+  4. Sign out, try signup with same email → "Email already registered — try logging in" inline error.
+  5. Switch to Log in tab → fill same email + password → Sign in → toast "Welcome back", admin TopBar visible again.
+  6. Click Admin button → admin view opens with "Admin · Payment verification" heading, 4 status filter tabs, payment table.
+  7. Trigger a new payment from the restricted flow with ref "TXN-ADMIN-VERIFY-001" → quickly navigate to admin → see the pending row with Verify + Reject buttons.
+  8. Click Verify → row instantly updates to "Verified" status badge, count on "Verified" tab increments, toast "Payment verified".
+  9. Trigger another payment with ref "TXN-REJECT-001" → admin → click Reject → row updates to "Rejected", count on "Rejected" tab increments, toast "Payment rejected".
+- Lint clean: 0 errors, 1 cosmetic warning (unused eslint-disable in apply-view).
+- Re-polled Stitch for variants: still 7 screens, REIMAGINE generation continues processing server-side.
+
+Stage Summary:
+- Auth is now production-shaped: bcrypt-hashed passwords, email format validation, password complexity rules (≥ 8 chars + ≥ 1 digit), separate signup vs login flows with distinct error messages.
+- Admin role via @admin.local demo convention (or by setting `role="admin"` directly on a User row). Admin button appears in TopBar only for admin users.
+- Admin view at /admin-equivalent (admin screen state in single-page router) lists all PaymentAttempts with status filter, and supports manual verify/reject on pending rows. Manual verify uses the same verifyPaymentInternal() as the simulated bank webhook, so the resulting UnlockedProfile row is identical regardless of verification path.
+- NEXTAUTH_SECRET added to .env so JWTs survive server restarts.
+- 10 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{28..37}-*.png covering pre-login, signup with existing email error, admin login, admin view empty + with pending payments, manual verify, manual reject.
+- Stitch variants: dispatched, still processing server-side; re-fetch when ready.
+- Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.

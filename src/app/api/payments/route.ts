@@ -60,6 +60,8 @@ export async function POST(req: NextRequest) {
 
     // Simulate the bank webhook firing asynchronously. In production this
     // would be an external POST to /api/payments/webhook from the bank's API.
+    // 30s delay gives an admin time to manually verify via /admin before the
+    // simulated webhook fires (so we can demonstrate the admin UI).
     setTimeout(async () => {
       try {
         await verifyPaymentInternal(attempt.id);
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         console.error("[webhook-sim] failed:", e);
       }
-    }, 4000);
+    }, 30000);
 
     return NextResponse.json(
       { attemptId: attempt.id, status: "pending" },

@@ -88,7 +88,9 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
       setStage("verifying");
 
       // 2. Poll the attempt status until the webhook verifies it (or timeout).
-      const maxPolls = 20;
+      // 60 polls × 1s = 60s window — gives the admin (or the 30s simulated
+      // webhook) time to mark the attempt as verified.
+      const maxPolls = 60;
       for (let i = 0; i < maxPolls; i++) {
         await new Promise((res) => setTimeout(res, 800));
         const s = await fetch(`/api/payments/${data.attemptId}`, {
