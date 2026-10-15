@@ -33,3 +33,22 @@ Stage Summary:
 - Stitch integration: opencode.json registers the MCP server for downstream tooling; project "Personal Finance Dashboard" (8827963556755951549) created on Stitch server as proof-of-integration, even though the per-screen generation calls did not complete from this sandbox.
 - Browser verification: 9 screenshots in /home/z/my-project/download/ covering dashboard, search, filter, detail, form, validation, dark mode, mobile.
 - Files created/modified: opencode.json, src/app/page.tsx, src/app/layout.tsx, src/lib/mock-data.ts, src/components/theme-provider.tsx, src/components/theme-toggle.tsx, src/components/app-shell.tsx, src/components/views/{dashboard,transactions,transaction-detail,add-transaction,auth,placeholder}-view.tsx, scripts/{probe_stitch,list_stitch_tools,inspect_schemas,stitch_create_project,stitch_generate_screen,stitch_gen_bg,stitch_poll_screens}.py.
+
+---
+Task ID: stitch-fetch-2
+Agent: main
+Task: Fetch all 7 screens from the Stitch project "Companion Web Page" (ID 14916947932805577916) — both the generated HTML and the screenshot images.
+
+Work Log:
+- Wrote scripts/stitch_fetch_companion.py that initializes the Stitch MCP session and calls `get_screen` for each of the 7 screen names.
+- For each screen, downloaded HTML code via `curl -sSL` from the `htmlCode.downloadUrl`, and the screenshot PNG from `screenshot.downloadUrl`.
+- All assets saved to /home/z/my-project/download/companion-web-page/.
+- Wrote manifest.json listing title, device type, dimensions, and saved filenames for each screen.
+
+Stage Summary:
+- The Stitch project "Companion Web Page" turns out to be a 6-screen TikTok Monetization Checker web app (plus 1 source image).
+- 6 HTML files (16–32 KB each) — clean Tailwind + Inter design with custom brand tokens (cyan/magenta/green on dark navy).
+- 7 PNG screenshots (50–220 KB) — preview renders of each screen.
+- 1 screen (`11312796588497380443`) is the user-uploaded source image ("ChatGPT Image Oct 15, 2026, 02_02_54 PM.png") and has no generated HTML.
+- 6 screens are full HTML designs with desktop layouts (2560px wide).
+- Output dir: /home/z/my-project/download/companion-web-page/ (manifest.json + 6 HTML + 7 PNG).

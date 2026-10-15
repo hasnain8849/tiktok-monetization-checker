@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "tertiary-fixed-dim": "#2fd9f4",
+          "outline-variant": "#3a494b",
+          "on-error": "#690005",
+          "inverse-on-surface": "#2e3039",
+          "on-tertiary-fixed": "#001f25",
+          "surface-container": "#1d1f27",
+          "on-surface-variant": "#b9cacb",
+          "on-error-container": "#ffdad6",
+          "secondary-container": "#de0442",
+          "surface-tint": "#00dce6",
+          "on-tertiary-container": "#006a78",
+          "secondary-fixed-dim": "#ffb3b6",
+          "primary-container": "#00f2fe",
+          "surface-bright": "#373942",
+          "surface-variant": "#32343d",
+          "surface": "#11131b",
+          "outline": "#849495",
+          "on-primary-container": "#006a70",
+          "secondary": "#ffb3b6",
+          "on-tertiary-fixed-variant": "#004e5a",
+          "background": "#11131b",
+          "primary-fixed-dim": "#00dce6",
+          "on-secondary-fixed": "#40000c",
+          "error": "#ffb4ab",
+          "surface-container-highest": "#32343d",
+          "on-primary-fixed": "#002022",
+          "surface-container-lowest": "#0b0e16",
+          "on-secondary": "#680019",
+          "on-tertiary": "#00363e",
+          "on-secondary-fixed-variant": "#920027",
+          "surface-container-high": "#272a32",
+          "on-secondary-container": "#fff1f1",
+          "surface-container-low": "#191b23",
+          "inverse-surface": "#e1e2ed",
+          "error-container": "#93000a",
+          "on-background": "#e1e2ed",
+          "on-primary": "#00373a",
+          "primary": "#e0fdff",
+          "tertiary": "#e9fbff",
+          "on-primary-fixed-variant": "#004f53",
+          "tertiary-fixed": "#a2eeff",
+          "inverse-primary": "#00696f",
+          "primary-fixed": "#6ff6ff",
+          "surface-dim": "#11131b",
+          "on-surface": "#e1e2ed",
+          "secondary-fixed": "#ffdada",
+          "tertiary-container": "#83eaff"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-2xl": "4rem",
+          "space-md": "1rem",
+          "margin-mobile": "1rem",
+          "margin": "2rem",
+          "space-sm": "0.5rem",
+          "gutter": "1.5rem",
+          "space-xl": "2.5rem",
+          "space-lg": "1.5rem",
+          "space-xs": "0.25rem",
+          "gutter-mobile": "1rem"
+        },
+        "fontFamily": {
+          "title-sm": [
+            "Plus Jakarta Sans"
+          ],
+          "body-md": [
+            "Inter"
+          ],
+          "display-hero": [
+            "Plus Jakarta Sans"
+          ],
+          "headline-md": [
+            "Plus Jakarta Sans"
+          ],
+          "body-sm": [
+            "Inter"
+          ],
+          "display-hero-mobile": [
+            "Plus Jakarta Sans"
+          ],
+          "headline-lg": [
+            "Plus Jakarta Sans"
+          ],
+          "label-md": [
+            "Plus Jakarta Sans"
+          ],
+          "headline-xl": [
+            "Plus Jakarta Sans"
+          ],
+          "body-lg": [
+            "Inter"
+          ],
+          "label-lg": [
+            "Plus Jakarta Sans"
+          ],
+          "label-xs": [
+            "Plus Jakarta Sans"
+          ]
+        },
+        "fontSize": {
+          "title-sm": [
+            "1.125rem",
+            {
+              "lineHeight": "1.625rem",
+              "fontWeight": "600"
+            }
+          ],
+          "body-md": [
+            "0.9375rem",
+            {
+              "lineHeight": "1.5rem",
+              "fontWeight": "400"
+            }
+          ],
+          "display-hero": [
+            "3.5rem",
+            {
+              "lineHeight": "4.25rem",
+              "letterSpacing": "-0.03em",
+              "fontWeight": "800"
+            }
+          ],
+          "headline-md": [
+            "1.375rem",
+            {
+              "lineHeight": "1.875rem",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "body-sm": [
+            "0.8125rem",
+            {
+              "lineHeight": "1.375rem",
+              "fontWeight": "400"
+            }
+          ],
+          "display-hero-mobile": [
+            "2.25rem",
+            {
+              "lineHeight": "2.75rem",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "800"
+            }
+          ],
+          "headline-lg": [
+            "1.75rem",
+            {
+              "lineHeight": "2.25rem",
+              "letterSpacing": "-0.015em",
+              "fontWeight": "700"
+            }
+          ],
+          "label-md": [
+            "0.75rem",
+            {
+              "lineHeight": "1rem",
+              "letterSpacing": "0.02em",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-xl": [
+            "2.25rem",
+            {
+              "lineHeight": "2.75rem",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "700"
+            }
+          ],
+          "body-lg": [
+            "1.125rem",
+            {
+              "lineHeight": "1.75rem",
+              "fontWeight": "400"
+            }
+          ],
+          "label-lg": [
+            "0.875rem",
+            {
+              "lineHeight": "1.25rem",
+              "letterSpacing": "0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "label-xs": [
+            "0.6875rem",
+            {
+              "lineHeight": "0.875rem",
+              "letterSpacing": "0.05em",
+              "fontWeight": "700"
+            }
+          ]
+        }
+      },
+    },
+  };</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 max-w-7xl mx-auto px-margin flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-lg"><a class="flex items-center gap-space-xs" data-path="home" href="#"><div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center relative"><span class="material-symbols-outlined text-primary-fixed-dim text-[20px]">play_arrow</span></div><span class="font-title-sm text-title-sm text-primary tracking-tight">TokAudit</span></a><nav class="hidden md:flex items-center gap-space-sm" data-active-classes="bg-surface-container-high text-on-surface font-label-lg text-label-lg rounded-full px-space-md py-space-xs"><a class="px-space-md py-space-xs font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" data-path="home" href="#">Home</a><a aria-current="page" class="transition-all bg-surface-container-high text-on-surface font-label-lg text-label-lg rounded-full px-space-md py-space-xs" data-path="checker" href="#">Checker</a><a class="px-space-md py-space-xs font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" data-path="pricing" href="#">Pricing</a><a class="px-space-md py-space-xs font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" data-path="dashboard" href="#">Dashboard</a></nav></div><div class="flex items-center gap-space-md"><a class="hidden sm:inline-flex font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors px-space-sm py-space-xs" data-path="login" href="#">Login</a><a class="rounded-full bg-gradient-to-r from-secondary-container to-primary-container px-space-lg py-space-xs font-label-lg text-label-lg text-on-secondary-container shadow-[0_0_24px_rgba(222,4,66,0.35)] hover:opacity-95 transition-all" data-path="checker" href="#">Get Started</a><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-[calc(100vh-140px)]"><div class="flex flex-col w-full">
+<div class="relative w-full overflow-hidden pb-space-2xl">
+<!-- Ambient Cyber Glows -->
+<div class="absolute -top-32 left-1/4 w-96 h-96 rounded-full bg-primary-container/10 blur-[120px] pointer-events-none"></div>
+<div class="absolute top-48 right-10 w-80 h-80 rounded-full bg-secondary-container/15 blur-[130px] pointer-events-none"></div>
+<div class="max-w-5xl mx-auto px-margin pt-space-xl flex flex-col gap-space-lg">
+<!-- Stepper / Breadcrumb Indicator -->
+<div class="flex items-center justify-between gap-space-md pb-space-xs">
+<div class="flex items-center gap-space-sm text-outline">
+<a class="flex items-center gap-space-xs hover:text-primary transition-colors" data-path="checker" href="#">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span class="font-label-md text-label-md">New Audit</span>
+</a>
+<span class="text-outline-variant font-label-md text-label-md">/</span>
+<span class="font-label-md text-label-md text-primary-fixed-dim uppercase tracking-wider">Audit Results #TK-9402</span>
+</div>
+<div class="inline-flex items-center gap-space-xs bg-surface-container-high px-space-md py-1 rounded-full shadow-sm">
+<span class="w-2 h-2 rounded-full bg-primary-fixed-dim animate-pulse"></span>
+<span class="font-label-xs text-label-xs text-primary-fixed-dim uppercase tracking-wider">Live Verified Sync</span>
+</div>
+</div>
+<!-- Page Headline with Typography Contrast -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-sm">
+<div>
+<span class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-widest block mb-space-xs">Creator Ecosystem Inspection</span>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Profile Details</h1>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-sm">
+          Live snapshot synced via official Creator Portal data protocols for monetization compliance and reward rates.
+        </p>
+</div>
+<!-- Creator Hero Glass Card -->
+<section class="relative rounded-xl bg-surface-container-low p-space-lg shadow-xl overflow-hidden backdrop-blur-xl">
+<!-- Card Top Accents -->
+<div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-secondary-container via-primary-container to-tertiary-fixed-dim opacity-70"></div>
+<div class="flex flex-col gap-space-lg">
+<!-- Top Row: Avatar, Identity & Actions -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-md">
+<div class="relative">
+<div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-surface-container-highest p-1 shadow-[0_0_24px_rgba(0,220,230,0.2)]">
+<img class="w-full h-full object-cover rounded-full" data-alt="Editorial close-up portrait of TikTok top creator Charli DAmelio against a dark futuristic background with moody cinematic cyan rim lighting and high contrast styling." id="profile-avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQ_YZpA1D0h99nJUHELiYZt_e6nj7rWVzOCNZxUfPHBn-A6J-Fpor2zGpz2nHnm-9BgYbdvAz1JwrdvuleOznENG6O_fB-V-ELW_D32pdaRZCY2v0PDiMV2Hg_RjricDORPV_scxovQEiWZtBbCRHqS5nIoq8uZe0We9fm_XtdaOcQ6r5MGMpc2jVc8epK7vR2x09rnzb_n9iJBLM4riNI5luvmMnVjn-8yahJ12GdYona9VxCARJ-hw"/>
+</div>
+<div class="absolute bottom-0 right-0 bg-primary-container text-on-primary-container w-6 h-6 rounded-full flex items-center justify-center shadow-md ring-2 ring-surface">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs">
+<h2 class="font-headline-md text-headline-md text-on-surface font-bold">@charlidamelio</h2>
+<span class="px-space-sm py-0.5 rounded-full bg-surface-container-high text-primary-fixed-dim font-label-xs text-label-xs uppercase">Verified Creator</span>
+</div>
+<a class="group inline-flex items-center gap-1 font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors mt-0.5" href="https://www.tiktok.com/@charlidamelio" rel="noopener noreferrer" target="_blank">
+<span class="text-tertiary-fixed-dim font-medium underline decoration-tertiary-fixed-dim/40 underline-offset-4">https://www.tiktok.com/@charlidamelio</span>
+<span class="material-symbols-outlined text-[14px] text-tertiary-fixed-dim group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform">north_east</span>
+</a>
+<div class="flex items-center gap-space-sm mt-space-xs text-outline font-label-xs text-label-xs">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary-fixed-dim">location_on</span> Los Angeles, US
+                  </span>
+<span>•</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-secondary">category</span> Dance &amp; Lifestyle
+                  </span>
+</div>
+</div>
+</div>
+<!-- Action buttons -->
+<div class="flex items-center gap-space-sm self-start sm:self-center">
+<button class="inline-flex items-center gap-space-xs px-space-md py-space-xs rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg transition-all shadow-sm active:scale-95" id="copy-btn">
+<span class="material-symbols-outlined text-[18px] text-tertiary-fixed-dim">content_copy</span>
+<span id="copy-text">Copy URL</span>
+</button>
+<button class="inline-flex items-center gap-space-xs px-space-md py-space-xs rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg transition-all shadow-sm active:scale-95" id="share-btn">
+<span class="material-symbols-outlined text-[18px] text-secondary">share</span>
+<span>Share</span>
+</button>
+</div>
+</div>
+<!-- Metrics Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md pt-space-xs">
+<!-- Followers Stat Card -->
+<div class="rounded-xl bg-surface-container p-space-md flex items-center justify-between shadow-sm relative overflow-hidden group hover:bg-surface-container-high transition-colors">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant flex items-center gap-1">
+                  Followers
+                  <span class="material-symbols-outlined text-[14px] text-outline cursor-pointer" title="Total public subscriber count">info</span>
+</span>
+<span class="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight mt-1">156.8M</span>
+<span class="font-label-xs text-label-xs text-primary-fixed-dim flex items-center gap-0.5 mt-1">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> +34.2K this week
+                </span>
+</div>
+<div class="w-12 h-12 rounded-xl bg-primary-container/10 flex items-center justify-center text-primary-container shadow-inner">
+<span class="material-symbols-outlined text-[24px]">groups</span>
+</div>
+</div>
+<!-- Following Stat Card -->
+<div class="rounded-xl bg-surface-container p-space-md flex items-center justify-between shadow-sm relative overflow-hidden group hover:bg-surface-container-high transition-colors">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant flex items-center gap-1">
+                  Following
+                  <span class="material-symbols-outlined text-[14px] text-outline cursor-pointer" title="Accounts followed by creator">info</span>
+</span>
+<span class="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight mt-1">1,264</span>
+<span class="font-label-xs text-label-xs text-outline flex items-center gap-0.5 mt-1">
+<span class="material-symbols-outlined text-[14px]">check</span> Stable ratio
+                </span>
+</div>
+<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center text-on-surface-variant shadow-inner">
+<span class="material-symbols-outlined text-[24px]">person_add</span>
+</div>
+</div>
+<!-- Total Likes Stat Card -->
+<div class="rounded-xl bg-surface-container p-space-md flex items-center justify-between shadow-sm relative overflow-hidden group hover:bg-surface-container-high transition-colors">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant flex items-center gap-1">
+                  Total Likes
+                  <span class="material-symbols-outlined text-[14px] text-outline cursor-pointer" title="Aggregate video hearts">info</span>
+</span>
+<span class="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight mt-1">11.2B</span>
+<span class="font-label-xs text-label-xs text-secondary flex items-center gap-0.5 mt-1">
+<span class="material-symbols-outlined text-[14px]">favorite</span> Top 0.01% platform tier
+                </span>
+</div>
+<div class="w-12 h-12 rounded-xl bg-secondary-container/15 flex items-center justify-center text-secondary shadow-inner">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">favorite</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Monetization Rules Inspection Grid -->
+<section class="rounded-xl bg-surface-container-low p-space-lg shadow-xl flex flex-col gap-space-md">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs pb-space-xs">
+<div>
+<h3 class="font-title-sm text-title-sm text-on-surface flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary-fixed-dim text-[20px]">verified_user</span>
+              TikTok Creator Rewards Eligibility Criteria
+            </h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Required thresholds for Creator Rewards Program, Series, and TikTok Pulse Ad-Revenue sharing.
+            </p>
+</div>
+<div class="inline-flex items-center gap-1.5 px-space-md py-1 rounded-full bg-primary-container/10 text-primary-container font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px]">task_alt</span>
+            4 of 4 Passed
+          </div>
+</div>
+<div class="flex flex-col gap-space-sm">
+<!-- Rule 1: Followers -->
+<div class="rounded-lg bg-surface-container px-space-lg py-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm hover:bg-surface-container-high transition-all">
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-full bg-primary-container/20 text-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Minimum 10,000 followers</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Creator Rewards program mandatory base criterion</span>
+</div>
+</div>
+<div class="flex items-center gap-space-lg self-end sm:self-center">
+<div class="flex flex-col items-end">
+<span class="font-label-xs text-label-xs text-on-surface-variant">Current Verified</span>
+<span class="font-headline-md text-headline-md text-primary-fixed-dim font-bold">156.8M</span>
+</div>
+<div class="flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary-container/10 text-primary-container font-label-xs text-label-xs">
+<span class="material-symbols-outlined text-[14px]">done_all</span>
+                Qualified
+              </div>
+</div>
+</div>
+<!-- Rule 2: Total Likes / Views -->
+<div class="rounded-lg bg-surface-container px-space-lg py-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm hover:bg-surface-container-high transition-all">
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-full bg-primary-container/20 text-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Minimum 100,000 total likes</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Validated authentic high-engagement threshold</span>
+</div>
+</div>
+<div class="flex items-center gap-space-lg self-end sm:self-center">
+<div class="flex flex-col items-end">
+<span class="font-label-xs text-label-xs text-on-surface-variant">Current Verified</span>
+<span class="font-headline-md text-headline-md text-primary-fixed-dim font-bold">11.2B</span>
+</div>
+<div class="flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary-container/10 text-primary-container font-label-xs text-label-xs">
+<span class="material-symbols-outlined text-[14px]">done_all</span>
+                Qualified
+              </div>
+</div>
+</div>
+<!-- Rule 3: Account Age -->
+<div class="rounded-lg bg-surface-container px-space-lg py-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm hover:bg-surface-container-high transition-all">
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-full bg-primary-container/20 text-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Account age 30+ days</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Active tenure prevents algorithmic probation</span>
+</div>
+</div>
+<div class="flex items-center gap-space-lg self-end sm:self-center">
+<div class="flex flex-col items-end">
+<span class="font-label-xs text-label-xs text-on-surface-variant">Account Tenure</span>
+<span class="font-headline-md text-headline-md text-primary-fixed-dim font-bold">3+ years</span>
+</div>
+<div class="flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary-container/10 text-primary-container font-label-xs text-label-xs">
+<span class="material-symbols-outlined text-[14px]">done_all</span>
+                Qualified
+              </div>
+</div>
+</div>
+<!-- Rule 4: Community Guidelines -->
+<div class="rounded-lg bg-surface-container px-space-lg py-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm hover:bg-surface-container-high transition-all">
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-full bg-primary-container/20 text-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Community guidelines</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Zero strikes, shadowbans, or intellectual property flags</span>
+</div>
+</div>
+<div class="flex items-center gap-space-lg self-end sm:self-center">
+<div class="flex flex-col items-end">
+<span class="font-label-xs text-label-xs text-on-surface-variant">Dispute Record</span>
+<span class="font-headline-md text-headline-md text-primary-fixed-dim font-bold">No violations</span>
+</div>
+<div class="flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary-container/10 text-primary-container font-label-xs text-label-xs">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+                Pristine
+              </div>
+</div>
+</div>
+</div>
+</section>
+<!-- Monetization Monetizable Formats Mosaic -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<div class="rounded-xl bg-surface-container-low p-space-md shadow-md flex flex-col justify-between">
+<div class="flex items-center gap-space-xs text-primary-container mb-space-sm">
+<span class="material-symbols-outlined text-[20px]">smart_display</span>
+<span class="font-title-sm text-title-sm text-on-surface">Creator Rewards</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            Qualified for 1min+ high-RPM video landscape views with dynamic RPM estimates ranging from $0.65 to $1.20.
+          </p>
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-xs text-label-xs uppercase">Est. Monthly RPM</span>
+<span class="font-label-lg text-label-lg text-primary font-bold">Optimal Tier</span>
+</div>
+</div>
+<div class="rounded-xl bg-surface-container-low p-space-md shadow-md flex flex-col justify-between">
+<div class="flex items-center gap-space-xs text-secondary mb-space-sm">
+<span class="material-symbols-outlined text-[20px]">storefront</span>
+<span class="font-title-sm text-title-sm text-on-surface">TikTok Shop Affiliate</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            Product showcase permission active. Direct merchant commissions and promotional sample tagging unlocked.
+          </p>
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-xs text-label-xs uppercase">Store Commission</span>
+<span class="font-label-lg text-label-lg text-secondary font-bold">Full Access</span>
+</div>
+</div>
+<div class="rounded-xl bg-surface-container-low p-space-md shadow-md flex flex-col justify-between">
+<div class="flex items-center gap-space-xs text-tertiary-fixed-dim mb-space-sm">
+<span class="material-symbols-outlined text-[20px]">workspace_premium</span>
+<span class="font-title-sm text-title-sm text-on-surface">LIVE Subscriptions</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            Real-time subscriber badges, exclusive streams, custom subscriber emotes, and direct tipping enabled.
+          </p>
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-xs text-label-xs uppercase">Gifting Revenue</span>
+<span class="font-label-lg text-label-lg text-tertiary-fixed-dim font-bold">Activated</span>
+</div>
+</div>
+</section>
+<!-- Bottom Sticky Confirmation Action Banner (As in Screen 5) -->
+<aside class="sticky bottom-4 z-40 rounded-xl bg-surface-container-high/95 backdrop-blur-xl p-space-md sm:px-space-lg sm:py-space-md shadow-[0_20px_40px_rgba(0,0,0,0.6),0_0_20px_rgba(0,242,254,0.12)]">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary-container text-[24px]">task_alt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-surface font-bold">Your account is eligible for monetization!</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">All platform thresholds passed. Click below to initiate instant onboard processing.</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm self-end sm:self-center shrink-0">
+<a class="hidden md:inline-flex px-space-md py-space-xs rounded-lg text-on-surface-variant hover:text-on-surface font-label-lg text-label-lg transition-colors" data-path="checker" href="#">
+              Export PDF
+            </a>
+<button class="inline-flex items-center gap-space-xs px-space-xl py-space-sm rounded-lg bg-primary-container text-on-primary-container font-headline-md text-[1rem] font-bold shadow-[0_0_24px_rgba(0,242,254,0.4)] hover:brightness-110 active:scale-95 transition-all" id="apply-btn">
+<span>Apply Now</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</aside>
+</div>
+</div>
+</div>
+<script>
+  // Simple interaction for Copy URL button
+  const copyBtn = document.getElementById('copy-btn');
+  const copyText = document.getElementById('copy-text');
+  if (copyBtn && copyText) {
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText('https://www.tiktok.com/@charlidamelio').then(() => {
+        copyText.textContent = 'Copied!';
+        setTimeout(() => {
+          copyText.textContent = 'Copy URL';
+        }, 2000);
+      }).catch(() => {
+        copyText.textContent = 'Copied!';
+        setTimeout(() => {
+          copyText.textContent = 'Copy URL';
+        }, 2000);
+      });
+    });
+  }
+
+  // Interactive share feedback
+  const shareBtn = document.getElementById('share-btn');
+  if (shareBtn) {
+    shareBtn.addEventListener('click', () => {
+      if (navigator.share) {
+        navigator.share({
+          title: '@charlidamelio TikTok Monetization Audit',
+          url: window.location.href,
+        }).catch(() => {});
+      } else {
+        alert('Audit summary URL ready for sharing!');
+      }
+    });
+  }
+
+  // Apply Now trigger demo
+  const applyBtn = document.getElementById('apply-btn');
+  if (applyBtn) {
+    applyBtn.addEventListener('click', () => {
+      applyBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span><span>Processing...</span>';
+      setTimeout(() => {
+        applyBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">done</span><span>Application Submitted</span>';
+      }, 1500);
+    });
+  }
+</script></main><footer class="w-full bg-surface-container-lowest py-space-xl"><div class="max-w-7xl mx-auto px-margin flex flex-col md:flex-row items-center justify-between gap-space-md"><div class="flex items-center gap-space-xs"><span class="font-title-sm text-title-sm text-primary">TokAudit</span><span class="font-body-sm text-body-sm text-on-surface-variant">© 2025 TikTok Monetization Engine. All rights reserved.</span></div><div class="flex items-center gap-space-lg"><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="privacy-policy" href="#">Privacy Policy</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="terms-and-conditions" href="#">Terms and Conditions</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="help-and-support" href="#">Support</a></div></div></footer></body></html>
