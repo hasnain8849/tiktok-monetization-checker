@@ -49,7 +49,7 @@ export function ApplyView({ profile, onBack, onApproved, onRestricted }: ApplyVi
       if (totalElapsed >= totalDuration) {
         setProgress(99);
         // Random outcome — 75% approve, 25% restrict; deterministic by handle for stability
-        const isRestricted = profile.id === "p_restricted" || profile.handle === "@prankzlife";
+        const isRestricted = !profile.monetizationEligible;
         if (isRestricted) {
           setTimeout(() => {
             if (cancelled) return;

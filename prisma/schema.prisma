@@ -65,3 +65,26 @@ model SavedAudit {
   checksTotal     Int
   checkedAt       DateTime @default(now())
 }
+
+// Tracks profiles that paid the unlock fee after being flagged as restricted.
+// Once a row exists for a given handle, the audit will treat the profile as eligible.
+model UnlockedProfile {
+  id              String   @id @default(cuid())
+  handle          String   @unique
+  feeAmount       Float    @default(49.0)
+  currency        String   @default("USD")
+  paymentMethod    String   @default("bank_transfer")
+  paymentRef       String?  // user-supplied reference / transaction id
+  paidAt           DateTime @default(now())
+}
+
+// Payment attempts — used by the /api/payments route to record each attempt.
+model PaymentAttempt {
+  id              String   @id @default(cuid())
+  handle          String
+  amount          Float
+  currency        String   @default("USD")
+  paymentRef      String
+  status          String   @default("pending") // pending | verified | rejected
+  createdAt       DateTime @default(now())
+}

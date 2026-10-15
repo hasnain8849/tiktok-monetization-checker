@@ -172,6 +172,128 @@ export function findProfile(handle: string): Profile | null {
   return sampleProfiles.find((p) => p.handle.toLowerCase().replace(/^@/, "") === normalized) || null;
 }
 
+// Deterministic pseudo-profile generator — synthesizes a believable TikTok
+// profile for any handle that isn't in our sample dataset. The same handle
+// always produces the same profile (so users can re-check and see stable
+// numbers), and ~80% of generated profiles pass eligibility so the demo
+// still works on arbitrary inputs.
+function hashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0);
+}
+function pick<T>(arr: T[], seed: number): T {
+  return arr[seed % arr.length];
+}
+function range(seed: number, min: number, max: number): number {
+  return min + (seed % (max - min + 1));
+}
+
+export function generateProfile(handle: string): Profile {
+  const clean = handle.trim().toLowerCase().replace(/^@/, "").replace(/^https?:\/\/(www\.)?tiktok\.com\//, "").replace(/[@/]/g, "");
+  const h = hashStr(clean || "anonymous");
+  const displayName = clean.charAt(0).toUpperCase() + clean.slice(1) || "Anonymous";
+  const initials = (clean.slice(0, 2) || "AA").toUpperCase();
+
+  // Most random handles are eligible; ~1 in 7 is restricted.
+  const outcomeKind = h % 7;
+  const restricted = outcomeKind === 0;
+  const ineligible = outcomeKind === 1;
+
+  const followers = restricted
+    ? range(h >> 2, 30_000, 250_000)
+    : ineligible
+      ? range(h >> 3, 500, 9_500)
+      : range(h >> 4, 12_000, 8_000_000) * (h % 3 === 0 ? 50 : 1);
+  const likes = Math.floor(followers * (8 + (h % 20)));
+  const videos = range(h >> 5, 12, 480);
+  const following = range(h >> 6, 80, 2400);
+
+  const regions = ["United States", "United Kingdom", "Brazil", "Germany", "Mexico", "Indonesia", "Philippines"];
+  const categories = ["Dance / Lifestyle", "Comedy", "Art / Illustration", "Gaming", "Music", "Education", "Food & Cooking", "Fitness", "Travel"];
+
+  const baseChecks: EligibilityCheck[] = [
+    {
+      key: "followers",
+      label: "Followers (≥ 10,000)",
+      requirement: "≥ 10,000",
+      actual: formatCount(followers),
+      passed: followers >= 10_000,
+    },
+    {
+      key: "likes",
+      label: "Total likes (≥ 100,000)",
+      requirement: "≥ 100,000",
+      actual: formatCount(likes),
+      passed: likes >= 100_000,
+    },
+    {
+      key: "age",
+      label: "Account age (≥ 30 days)",
+      requirement: "≥ 30 days",
+      actual: `${range(h >> 7, 20, 1500)} days`,
+      passed: (h >> 7) % 7 !== 0,
+    },
+    {
+      key: "guidelines",
+      label: "Community guidelines",
+      requirement: "No violations",
+      actual: restricted ? "Restricted" : "Clean",
+      passed: !restricted,
+    },
+    {
+      key: "region",
+      label: "Eligible region",
+      requirement: "Supported country",
+      actual: pick(regions, h >> 8),
+      passed: true,
+    },
+    {
+      key: "videos",
+      label: "Original videos (≥ 3 in last 30 days)",
+      requirement: "≥ 3",
+      actual: `${range(h >> 9, 0, 28)}`,
+      passed: (h >> 9) % 5 !== 0,
+    },
+  ];
+
+  const allPassed = baseChecks.every((c) => c.passed);
+
+  return {
+    id: `gen_${clean}`,
+    handle: `@${clean}`,
+    displayName,
+    avatarInitials: initials,
+    bio: `Generated profile for ${clean || "anonymous"} · demo data`,
+    url: `https://www.tiktok.com/@${clean}`,
+    verified: !restricted && followers > 1_000_000,
+    monetizationEligible: allPassed,
+    metrics: { followers, following, likes, videos },
+    checks: baseChecks,
+    accountAgeDays: range(h >> 7, 20, 1500),
+    region: pick(regions, h >> 8),
+    category: pick(categories, h >> 10),
+    engagementRate: Number((2 + (h % 150) / 10).toFixed(1)),
+    avgViewsPerVideo: Math.floor(followers * (0.05 + (h % 30) / 100)),
+    recentVideos: Array.from({ length: 3 }, (_, i) => ({
+      id: `gen_${clean}_v${i}`,
+      title: ["first post this week", "throwback to last month", "tutorial: easy transition"][i],
+      views: Math.floor(followers * (0.02 + (h % 20) / 100)) - i * 1000,
+      likes: Math.floor(likes / (videos || 1) * 0.5) - i * 100,
+      postedDaysAgo: (i + 1) * 3 + (h % 4),
+    })),
+  };
+}
+
+// Find a profile from the sample dataset, or generate one if not found.
+// Used by the API route to support arbitrary TikTok handle inputs.
+export function findOrGenerateProfile(handle: string): Profile {
+  return findProfile(handle) ?? generateProfile(handle);
+}
+
 export const sampleSearches = [
   "@mrbeast",
   "@charlidamelio",

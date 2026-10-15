@@ -71,6 +71,7 @@ export default function Home() {
             profile={screen.profile}
             onBack={() => setScreen({ kind: "landing" })}
             onApply={(p) => setScreen({ kind: "apply", profile: p })}
+            onUnlock={(p) => setScreen({ kind: "restricted", profile: p })}
           />
         )}
         {screen.kind === "apply" && (
@@ -88,6 +89,7 @@ export default function Home() {
             onRecheck={() =>
               setScreen({ kind: "checker", initialHandle: screen.profile.handle })
             }
+            onUnlocked={() => setScreen({ kind: "dashboard" })}
           />
         )}
         {screen.kind === "dashboard" && (

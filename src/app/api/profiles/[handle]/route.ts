@@ -1,23 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  findProfile,
+  findOrGenerateProfile,
   type Profile,
   type EligibilityCheck,
 } from "@/lib/tiktok-data";
 
-// In a real app this would scrape TikTok or call a 3rd-party API.
-// Here we look up our mock dataset first, then fall back to the DB cache.
+// Apply the unlock effect: if a profile has paid the unlock fee, force every
+// failed eligibility check to "passed" and flip monetizationEligible.
+function applyUnlock(p: Profile): Profile {
+  return {
+    ...p,
+    monetizationEligible: true,
+    checks: p.checks.map((c) =>
+      c.passed
+        ? c
+        : { ...c, passed: true, actual: c.actual === "Restricted" ? "Clean" : c.actual }
+    ),
+  };
+}
+
 async function fetchProfileFromSource(handle: string): Promise<Profile | null> {
-  // 1. Try DB cache first (fast path for re-checks)
   const normalized = handle.trim().toLowerCase().replace(/^@/, "");
+
+  // 1. Check if this profile has paid the unlock fee.
+  let unlocked = false;
+  try {
+    const unlockRow = await db.unlockedProfile.findUnique({
+      where: { handle: normalized },
+    });
+    unlocked = !!unlockRow;
+  } catch (e) {
+    console.warn("Unlock lookup failed:", e);
+  }
+
+  // 2. Try DB cache first (fast path for re-checks)
   try {
     const cached = await db.cachedProfile.findUnique({
       where: { handle: normalized },
     });
     if (cached && Date.now() - cached.fetchedAt.getTime() < 1000 * 60 * 60) {
-      // Cache valid for 1 hour
-      return {
+      const profile: Profile = {
         id: cached.id,
         handle: `@${cached.handle}`,
         displayName: cached.displayName,
@@ -40,14 +63,15 @@ async function fetchProfileFromSource(handle: string): Promise<Profile | null> {
         checks: JSON.parse(cached.checksJson) as EligibilityCheck[],
         recentVideos: JSON.parse(cached.recentVideosJson),
       };
+      return unlocked ? applyUnlock(profile) : profile;
     }
   } catch (e) {
-    // DB may not be ready; fall through to source.
     console.warn("DB cache lookup failed:", e);
   }
 
-  // 2. Source lookup — in production this would be TikTok's API or a scraper
-  return findProfile(handle);
+  // 3. Source lookup — uses sample dataset, or generates a deterministic profile
+  const profile = findOrGenerateProfile(handle);
+  return unlocked ? applyUnlock(profile) : profile;
 }
 
 export async function GET(
@@ -56,26 +80,20 @@ export async function GET(
 ) {
   const { handle: rawHandle } = await params;
   const handle = decodeURIComponent(rawHandle);
+  if (!handle) {
+    return NextResponse.json({ error: "handle required" }, { status: 400 });
+  }
 
   const profile = await fetchProfileFromSource(handle);
 
-  if (!profile) {
-    return NextResponse.json(
-      {
-        error: "Profile not found",
-        message: `No TikTok profile matches "${handle}". Try @mrbeast, @charlidamelio, @artbyjordan, or @prankzlife.`,
-      },
-      { status: 404 }
-    );
-  }
-
   // Persist to DB cache (upsert) so subsequent lookups are instant
   try {
+    const normalizedHandle = profile.handle.replace(/^@/, "").toLowerCase();
     await db.cachedProfile.upsert({
-      where: { handle: profile.handle.replace(/^@/, "").toLowerCase() },
+      where: { handle: normalizedHandle },
       create: {
         id: profile.id,
-        handle: profile.handle.replace(/^@/, "").toLowerCase(),
+        handle: normalizedHandle,
         displayName: profile.displayName,
         avatarInitials: profile.avatarInitials,
         bio: profile.bio,

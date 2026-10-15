@@ -15,6 +15,8 @@ import {
   XCircle,
   ExternalLink,
   Play,
+  Lock,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,11 +33,15 @@ interface ProfileDetailProps {
   profile: Profile;
   onBack: () => void;
   onApply: (p: Profile) => void;
+  onUnlock: (p: Profile) => void;
 }
 
-export function ProfileDetailView({ profile, onBack, onApply }: ProfileDetailProps) {
+export function ProfileDetailView({ profile, onBack, onApply, onUnlock }: ProfileDetailProps) {
   const passedCount = profile.checks.filter((c) => c.passed).length;
   const allPassed = passedCount === profile.checks.length;
+  const isRestricted = profile.checks.some(
+    (c) => c.key === "guidelines" && !c.passed
+  );
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12 space-y-6">
@@ -153,7 +159,16 @@ export function ProfileDetailView({ profile, onBack, onApply }: ProfileDetailPro
             ))}
           </ul>
           <Separator className="bg-slate-800" />
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {isRestricted && (
+              <Button
+                onClick={() => onUnlock(profile)}
+                className="font-semibold rounded-xl border-0 h-11 px-6 bg-gradient-to-r from-amber-500/30 to-red-500/30 border-amber-500/40 text-amber-200 hover:from-amber-500/40 hover:to-red-500/40"
+              >
+                <ShieldAlert className="w-4 h-4" />
+                View restrictions & pay to unlock
+              </Button>
+            )}
             <Button
               onClick={() => onApply(profile)}
               disabled={!allPassed}
@@ -164,6 +179,7 @@ export function ProfileDetailView({ profile, onBack, onApply }: ProfileDetailPro
                   : "bg-slate-800 text-slate-500 cursor-not-allowed"
               )}
             >
+              <Lock className="w-4 h-4" />
               {allPassed ? "Apply for Monetization" : "Resolve issues first"}
             </Button>
           </div>
