@@ -115,9 +115,12 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
   }, []);
 
   // Mount Stripe Elements when in stripe mode + we have a clientSecret.
-  // The user enters their card into the Stripe iframe; Stripe confirms
-  // server-side and fires /api/payments/webhook which transitions the
-  // attempt to verified → the socket listener picks up the unlock.
+  // The user enters their card into the Stripe iframe; on submit we call
+  // stripe.confirmPayment which triggers Stripe's server-side confirmation.
+  // Stripe then fires /api/payments/webhook which transitions the attempt
+  // to verified → the socket listener picks up the unlock.
+  const stripeRef = React.useRef<{ stripe: unknown; elements: unknown } | null>(null);
+
   React.useEffect(() => {
     if (provider !== "stripe" || !clientSecret || !stripePublishableKey) {
       return;
@@ -131,6 +134,7 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
         const elements = stripe.elements({ clientSecret });
         const card = elements.create("payment");
         card.mount(cardRef.current);
+        stripeRef.current = { stripe, elements };
         setCardReady(true);
       } catch (e) {
         console.error("Stripe Elements mount failed:", e);
@@ -143,9 +147,55 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
     })();
     return () => {
       disposed = true;
+      stripeRef.current = null;
       setCardReady(false);
     };
   }, [provider, clientSecret, stripePublishableKey, toast]);
+
+  // Confirm the Stripe PaymentIntent. Triggered by the "Pay with card"
+  // button that appears below the Stripe Elements form.
+  const confirmStripePayment = async () => {
+    const ref = stripeRef.current;
+    if (!ref) {
+      toast({
+        title: "Stripe not ready",
+        description: "The payment form is still loading.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setStage("verifying");
+    try {
+      // @ts-expect-error — TypeScript doesn't see the @stripe/stripe-js types
+      // because we lazy-import. The runtime API matches these calls.
+      const result = await ref.stripe.confirmPayment({
+        elements: ref.elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/`,
+        },
+        redirect: "if_required",
+      });
+      if (result.error) {
+        throw new Error(result.error.message ?? "Stripe confirmation failed");
+      }
+      // Stripe confirmed server-side; the webhook will fire next, which
+      // transitions the attempt to verified → the socket listener picks up
+      // the unlock. We just keep the "verifying" stage until that happens.
+      toast({
+        title: "Card charged",
+        description:
+          "Stripe confirmed your payment. Waiting for verification webhook…",
+      });
+    } catch (e) {
+      console.error(e);
+      setStage("details");
+      toast({
+        title: "Payment failed",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    }
+  };
 
   const copy = (text: string, label: string) => {
     navigator.clipboard?.writeText(text);
@@ -434,6 +484,15 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
                           <Loader2 className="w-3 h-3 animate-spin" />
                           Loading secure payment form...
                         </p>
+                      )}
+                      {cardReady && (
+                        <Button
+                          onClick={confirmStripePayment}
+                          className="w-full gradient-btn-primary text-white font-semibold rounded-xl border-0 h-11"
+                        >
+                          <Lock className="w-4 h-4" />
+                          Pay ${(bank?.feeAmount ?? 49).toFixed(2)} with card
+                        </Button>
                       )}
                       <p className="text-xs text-slate-500">
                         Your card details are sent directly to Stripe. We never

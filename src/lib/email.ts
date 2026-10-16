@@ -2,17 +2,20 @@
 //
 // Two providers, selected via EMAIL_PROVIDER env var:
 //   - "console" (default): logs the would-be email to the server console.
-//     Useful in development / sandboxed environments where SMTP isn't
-//     available. The email contents are still rendered and saved as an
-//     EmailLog row so they can be inspected.
 //   - "smtp": uses Nodemailer with SMTP connection details from env vars
-//     (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM). Point this
-//     at Resend / SendGrid / Mailgun / Gmail etc.
+//     (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM).
 //
 // Every email is also persisted as an EmailLog row (status, recipient,
 // subject, body, error) for compliance + debugging.
+//
+// Two ways to send:
+//   1. sendEmail({ to, subject, text }) — plain-text body
+//   2. sendTemplateEmail(MyTemplate, { to, subject, ...templateProps }) —
+//      renders a React Email template to HTML + a text version, and sends both.
 
 import { db } from "@/lib/db";
+import { render } from "@react-email/render";
+import * as React from "react";
 
 export type EmailProviderName = "console" | "smtp";
 
@@ -81,13 +84,8 @@ export async function sendEmail(opts: SendEmailOpts): Promise<EmailResult> {
   try {
     result = provider === "smtp" ? await sendSmtp(opts) : await sendConsole(opts);
   } catch (e) {
-    result = {
-      ok: false,
-      provider,
-      error: (e as Error).message,
-    };
+    result = { ok: false, provider, error: (e as Error).message };
   }
-  // Persist to EmailLog for compliance.
   try {
     await db.emailLog.create({
       data: {
@@ -105,4 +103,30 @@ export async function sendEmail(opts: SendEmailOpts): Promise<EmailResult> {
     console.error("email log write failed:", e);
   }
   return result;
+}
+
+// Render a React Email template to HTML + a plain-text fallback, then send.
+// `Component` must be a React Email template component (e.g., PaymentVerifiedEmail).
+// `props` are the template's props. `subject` and `to` are the email envelope.
+export async function sendTemplateEmail<P>(
+  Component: React.ComponentType<P>,
+  props: P & { to?: string; subject?: string; tag?: string }
+): Promise<EmailResult> {
+  const { to, subject, tag, ...templateProps } = props as {
+    to?: string;
+    subject?: string;
+    tag?: string;
+  } & P;
+  if (!to || !subject) {
+    throw new Error("sendTemplateEmail requires `to` and `subject` props");
+  }
+  const element = React.createElement(Component, templateProps as P);
+  const html = await render(element);
+  // Plain-text fallback: strip tags + collapse whitespace.
+  const text = html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return sendEmail({ to, subject, text, html, tag });
 }

@@ -853,6 +853,7 @@ interface HandleHistoryData {
   handle: string;
   attempts: PaymentAttempt[];
   auditEntries: AuditEntry[];
+  emailEntries: EmailLogRow[];
   unlocked: boolean;
   unlockedAt: string | null;
   paymentRef: string | null;
@@ -988,6 +989,61 @@ function HandleHistoryDialog({
                         </span>
                       </div>
                       <p className="text-xs text-slate-400">by {e.actorEmail}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Emails */}
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Mail className="w-3 h-3" />
+                Emails ({data.emailEntries?.length ?? 0})
+              </p>
+              {!data.emailEntries || data.emailEntries.length === 0 ? (
+                <p className="text-xs text-slate-500 py-3 text-center">No emails sent for this handle.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {data.emailEntries.map((m) => (
+                    <li
+                      key={m.id}
+                      className="rounded-md border border-slate-800 bg-slate-900/40 p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-medium text-slate-200 truncate">
+                          {m.subject}
+                        </span>
+                        <span className="text-xs text-slate-500 shrink-0">
+                          {new Date(m.createdAt).toLocaleString("en-US")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">to {m.to}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {m.tag && (
+                          <Badge
+                            variant="outline"
+                            className="bg-slate-700/40 text-slate-300 border-0 text-[10px]"
+                          >
+                            {m.tag}
+                          </Badge>
+                        )}
+                        <Badge
+                          variant="outline"
+                          className={
+                            m.status === "sent"
+                              ? "bg-emerald-500/20 text-emerald-300 border-0 text-[10px]"
+                              : "bg-red-500/20 text-red-300 border-0 text-[10px]"
+                          }
+                        >
+                          {m.status}
+                        </Badge>
+                        {m.provider && (
+                          <span className="text-[10px] text-slate-500">
+                            via {m.provider}
+                          </span>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>

@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { getAuthUserId } from "@/lib/auth";
 import { notifyPaymentUpdate } from "@/lib/notify";
 import { getPaymentProvider } from "@/lib/payment-provider";
-import { sendEmail } from "@/lib/email";
+import { sendTemplateEmail } from "@/lib/email";
+import PaymentVerifiedEmail from "@/emails/payment-verified-email";
 
 // Bank account details shown to users who want to pay the unlock fee.
 // In a real app these would be a merchant bank account and the verification
@@ -166,27 +167,20 @@ export async function verifyPaymentInternal(attemptId: string) {
   });
 
   // Send a payment-verified email to the user who paid (if their account has
-  // an email). Fire-and-forget — failures are logged inside sendEmail.
+  // an email). Fire-and-forget — failures are logged inside sendTemplateEmail.
   if (attempt.userId) {
     try {
       const user = await db.user.findUnique({ where: { id: attempt.userId } });
       if (user?.email) {
-        await sendEmail({
+        await sendTemplateEmail(PaymentVerifiedEmail, {
           to: user.email,
           subject: "Your TikTok unlock has been verified",
-          text: [
-            `Hi ${user.name ?? "there"},`,
-            ``,
-            `Your payment for ${attempt.handle} has been verified.`,
-            `Reference: ${attempt.paymentRef}`,
-            `Amount: $${attempt.amount.toFixed(2)} ${attempt.currency}`,
-            ``,
-            `You can now re-run the audit on ${attempt.handle} — it will`,
-            `show as eligible for TikTok monetization.`,
-            ``,
-            `— TikTok Monetization Checker`,
-          ].join("\n"),
           tag: "payment_verified",
+          userName: user.name ?? "there",
+          handle: attempt.handle,
+          paymentRef: attempt.paymentRef,
+          amount: attempt.amount,
+          currency: attempt.currency,
         });
       }
     } catch (e) {

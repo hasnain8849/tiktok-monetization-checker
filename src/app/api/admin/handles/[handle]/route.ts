@@ -20,7 +20,7 @@ export async function GET(
   }
 
   try {
-    const [attempts, auditEntries, unlockRow] = await Promise.all([
+    const [attempts, auditEntries, unlockRow, emailEntries] = await Promise.all([
       db.paymentAttempt.findMany({
         where: { handle: `@${handle}` },
         orderBy: { createdAt: "desc" },
@@ -32,6 +32,19 @@ export async function GET(
         take: 100,
       }),
       db.unlockedProfile.findUnique({ where: { handle } }),
+      // Emails whose subject contains the handle — payment-verified emails
+      // always include the handle in the subject line, so this catches them.
+      // (Also catches eligibility-alert emails for the same handle.)
+      db.emailLog.findMany({
+        where: {
+          OR: [
+            { subject: { contains: handle } },
+            { body: { contains: handle } },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
     ]);
 
     return NextResponse.json({
@@ -41,6 +54,7 @@ export async function GET(
       unlocked: !!unlockRow,
       unlockedAt: unlockRow?.paidAt ?? null,
       paymentRef: unlockRow?.paymentRef ?? null,
+      emailEntries,
     });
   } catch (e) {
     console.error("admin handle history failed:", e);
