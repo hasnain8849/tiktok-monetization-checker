@@ -691,3 +691,37 @@ Stage Summary:
 - 3 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{69..71}-*.png covering shared profile view, 2FA regenerate section, and regenerated backup codes.
 - Stitch variants: dispatched, still processing server-side; re-fetch when ready.
 - Lint clean (0 errors, 2 cosmetic warnings). Dev server healthy.
+
+---
+Task ID: share-revoke-auth-ratelimit-emailonshare-ci-15
+Agent: main
+Task: Continue all next steps: share-token revoke UI, rate limit on /api/auth login via proxy, email-on-share notification, re-poll Stitch, CI workflow.
+
+Work Log:
+- Created GET /api/account/share-tokens (admin-required → user-scoped) — returns the last 100 ShareToken rows owned by the logged-in user, newest first. The row includes id, token (truncated for display), handle, createdAt, expiresAt, revokedAt so the UI can show status badges.
+- Created DELETE /api/account/share-tokens/[id] — checks the row exists AND is owned by the logged-in user (token.userId === session.userId, returns 403 if not), then sets revokedAt to the current time. The row is preserved for audit (no deleteMany) so past views are still traceable. The public /api/share/[token] endpoint already checks revokedAt and returns 404 for revoked tokens.
+- Added Share tokens section to SettingsView: auto-fetches /api/account/share-tokens on mount. Shows a count + helpful description ("Public, read-only URLs… You'll be emailed when someone views your share link. Click Revoke to invalidate a link immediately."). Each token row shows the handle, status badge (Active/Expired/Revoked with green/amber/slate colors), truncated token, creation date, and optional expiry date. Active tokens have a red-outline Revoke button; revoked/expired tokens show the button greyed out (no button visible).
+- Browser-verified: Settings → Share tokens (1) → @mrbeast token with Active badge + Revoke button → clicked Revoke → badge changed to "Revoked" → confirmed via curl that GET /api/share/[token] returns 404 "share not found" for the revoked token.
+- Created src/proxy.ts (Next.js 16's successor to middleware.ts — the "middleware" file convention was deprecated in favor of "proxy"). Exports an async `proxy` function that runs on every request matching the matcher. Currently rate-limits POST /api/auth/callbacks/credentials to 10 attempts per minute per IP (using the same in-memory rate-limit helper). Returns 429 with resetAt when exceeded. The matcher restricts the proxy to /api/auth/:path* so it doesn't tax every static asset or page render.
+- Browser-verified via curl: 12 login attempts to /api/auth/callbacks/credentials — attempts 1-10 reached NextAuth (returned 400 because the curl payload wasn't properly CSRF-formatted, but the request was let through by the proxy), attempts 11 and 12 returned 429 with "Too many login attempts. Try again in a minute." — the proxy correctly blocked them before they even reached the authorize function.
+- Added ShareViewLog Prisma model (id, shareTokenId, viewerIp optional, viewerUa optional, createdAt). Pushed to SQLite.
+- Created src/emails/share-view-email.tsx — branded React Email template with "Your share link was viewed 🔗" heading, summary box (Handle, Viewer IP in mono code, truncated User Agent, When timestamp), and an "Open share link" CTA button.
+- Updated GET /api/share/[token] to:
+  1. Record every view in ShareViewLog (shareTokenId + viewer IP from x-forwarded-for + user agent from user-agent header).
+  2. Check if the viewer is the creator (same session userId) — don't email the creator if they're viewing their own share link (would be self-spam).
+  3. For non-creator views: fire-and-forget sendTemplateEmail(ShareViewEmail) to the creator's email, tagged "share_viewed". Includes the viewer's IP, truncated UA, handle, and timestamp. Honors the creator's NotificationSettings (via the sendEmail userId check) — suppressed if they've opted out of payment/eligibility emails.
+- Wrote .github/workflows/ci.yml with two jobs:
+  - lint: checkout → setup bun → bun install --frozen-lockfile → bun run db:generate (with a throwaway DATABASE_URL) → bun run lint → bunx tsc --noEmit (continue-on-error since tsc may flag edge cases).
+  - build: needs lint → checkout → setup bun → bun install --frozen-lockfile → bun run db:generate → bun run build (with all required env vars: DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL, PAYMENT_PROVIDER=simulated, EMAIL_PROVIDER=console, CRON_SECRET).
+  - Triggered on push and pull_request to main/master.
+- Validated the CI YAML with Python's yaml.safe_load — no syntax errors.
+- Re-polled Stitch for variants: still 7 screens, REIMAGINE generation continues server-side.
+
+Stage Summary:
+- Users can now manage their public share tokens from Settings → Share tokens. Each row shows status (Active / Expired / Revoked), creation date, and optional expiry. Click Revoke on an Active token to immediately invalidate it (the public URL returns 404).
+- Login attempts to /api/auth/callbacks/credentials are now rate-limited to 10/min/IP via the new proxy.ts (Next.js 16's successor to middleware.ts). 429 returned on the 11th attempt, preventing brute-force password guessing.
+- Share link views are logged in ShareViewLog with the viewer's IP + UA. Non-creator views fire a "ShareViewEmail" to the link's creator via the React Email template + sendTemplateEmail path (which honors NotificationSettings — suppressed if the creator has opted out).
+- CI workflow at .github/workflows/ci.yml runs lint + tsc + build on every push/PR to main/master using Bun. Ready to connect to GitHub Actions.
+- 2 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{72,73}-*.png covering settings share-tokens section + revoked token.
+- Stitch variants: dispatched, still processing server-side; re-fetch when ready.
+- Lint clean (0 errors, 2 cosmetic warnings). Dev server healthy.

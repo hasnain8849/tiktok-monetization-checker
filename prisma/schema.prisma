@@ -178,3 +178,14 @@ model ShareToken {
   createdAt   DateTime @default(now())
   revokedAt   DateTime?
 }
+
+// Share-view log — every time someone opens a ShareToken URL, we record
+// the viewer's IP + UA so the creator gets an email notification and
+// can see who's been looking at their shared audit.
+model ShareViewLog {
+  id          String   @id @default(cuid())
+  shareTokenId String
+  viewerIp    String?
+  viewerUa    String?
+  createdAt   DateTime @default(now())
+}

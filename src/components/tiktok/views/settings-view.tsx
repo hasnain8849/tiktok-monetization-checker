@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, Save, Loader2, User as UserIcon, KeyRound, Shield, Mail, Bell } from "lucide-react";
+import { ArrowLeft, Save, Loader2, User as UserIcon, KeyRound, Shield, Mail, Bell, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,15 @@ interface AccountInfo {
   name: string | null;
   role: string;
   createdAt: string;
+}
+
+interface ShareTokenRow {
+  id: string;
+  token: string;
+  handle: string;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
 }
 
 export function SettingsView({ onBack }: { onBack: () => void }) {
@@ -47,6 +56,9 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [disabling, setDisabling] = React.useState(false);
   const [regenCode, setRegenCode] = React.useState("");
   const [regenerating, setRegenerating] = React.useState(false);
+  // Share tokens state
+  const [shareTokens, setShareTokens] = React.useState<ShareTokenRow[]>([]);
+  const [shareLoading, setShareLoading] = React.useState(false);
   const { toast } = useToast();
 
   React.useEffect(() => {
@@ -231,6 +243,39 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       setError((e as Error).message);
     } finally {
       setSavingNotifs(false);
+    }
+  };
+
+  // Share-token management
+  const loadShareTokens = React.useCallback(async () => {
+    setShareLoading(true);
+    try {
+      const r = await fetch("/api/account/share-tokens", { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = (await r.json()) as { tokens: ShareTokenRow[] };
+      setShareTokens(data.tokens ?? []);
+    } catch (e) {
+      console.warn("share tokens fetch failed:", e);
+    } finally {
+      setShareLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadShareTokens();
+  }, [loadShareTokens]);
+
+  const revokeShareToken = async (id: string) => {
+    try {
+      const r = await fetch(`/api/account/share-tokens/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      toast({ title: "Share token revoked", description: "The public URL no longer works." });
+      setShareTokens((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, revokedAt: new Date().toISOString() } : t))
+      );
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Revoke failed", variant: "destructive" });
     }
   };
 
@@ -677,6 +722,95 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                 "Set up 2FA"
               )}
             </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Share tokens section */}
+      <div className="glass-panel rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-4">
+        <h2 className="text-base font-bold text-white flex items-center gap-2">
+          <Share2 className="w-4 h-4 text-cyan-400" />
+          Share tokens ({shareTokens.length})
+        </h2>
+        <p className="text-xs text-slate-400">
+          Public, read-only URLs that anyone can use to view an audit snapshot
+          without logging in. You&apos;ll be emailed when someone views your
+          share link. Click Revoke to invalidate a link immediately.
+        </p>
+        {shareLoading && shareTokens.length === 0 ? (
+          <div className="text-xs text-slate-500 flex items-center gap-2 py-3">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Loading...
+          </div>
+        ) : shareTokens.length === 0 ? (
+          <div className="text-xs text-slate-500 py-3 text-center">
+            No share tokens yet. Click &quot;Share audit&quot; on any profile
+            detail page to create one.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {shareTokens.map((t) => {
+              const expired =
+                t.expiresAt && new Date(t.expiresAt).getTime() < Date.now();
+              const revoked = !!t.revokedAt;
+              const active = !expired && !revoked;
+              return (
+                <div
+                  key={t.id}
+                  className={
+                    "rounded-md border p-3 flex items-center justify-between gap-3 " +
+                    (revoked
+                      ? "border-slate-800 bg-slate-900/20 opacity-60"
+                      : expired
+                        ? "border-amber-500/30 bg-amber-500/5"
+                        : "border-cyan-500/30 bg-cyan-500/5")
+                  }
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium text-white">{t.handle}</span>
+                      {revoked && (
+                        <Badge variant="outline" className="bg-slate-700/40 text-slate-400 border-0 text-[10px]">
+                          Revoked
+                        </Badge>
+                      )}
+                      {expired && !revoked && (
+                        <Badge variant="outline" className="bg-amber-500/20 text-amber-300 border-0 text-[10px]">
+                          Expired
+                        </Badge>
+                      )}
+                      {active && (
+                        <Badge variant="outline" className="bg-emerald-500/20 text-emerald-300 border-0 text-[10px]">
+                          Active
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-500 flex flex-wrap gap-3">
+                      <span className="font-mono truncate max-w-[200px]">
+                        {t.token.slice(0, 20)}…
+                      </span>
+                      <span>Created {new Date(t.createdAt).toLocaleDateString("en-US")}</span>
+                      {t.expiresAt && (
+                        <span>
+                          {expired ? "Expired" : "Expires"}{" "}
+                          {new Date(t.expiresAt).toLocaleDateString("en-US")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {active && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => revokeShareToken(t.id)}
+                      className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-8 shrink-0"
+                    >
+                      Revoke
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

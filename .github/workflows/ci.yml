@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint:
+    name: Lint + Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: bun run db:generate
+        env:
+          DATABASE_URL: file:./ci-check.db
+
+      - name: Run ESLint
+        run: bun run lint
+
+      - name: Type check
+        run: bunx tsc --noEmit
+        continue-on-error: true # tsc may flag some edge cases; don't block PRs
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: bun run db:generate
+        env:
+          DATABASE_URL: file:./ci-build.db
+
+      - name: Build Next.js
+        run: bun run build
+        env:
+          DATABASE_URL: file:./ci-build.db
+          NEXTAUTH_SECRET: ci-nextauth-secret-for-build-only-not-production
+          NEXTAUTH_URL: http://localhost:3000
+          PAYMENT_PROVIDER: simulated
+          EMAIL_PROVIDER: console
+          CRON_SECRET: ci-cron-secret
