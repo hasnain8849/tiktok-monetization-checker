@@ -496,3 +496,59 @@ Stage Summary:
 - 2 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{54,55}-*.png covering the React Email rendered payment verification + handle history dialog with the new Emails section.
 - Stitch variants: dispatched, still processing server-side; re-fetch when ready.
 - Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.
+
+---
+Task ID: email-preview-webhooks-notifs-metrics-12
+Agent: main
+Task: Continue all next steps: email preview in admin, webhook retry with backoff, per-user notification settings, metrics dashboard, re-poll Stitch.
+
+Work Log:
+- Added 3 new Prisma models + pushed to SQLite:
+  - WebhookDelivery (id, handle, attemptId, status, attemptCount, lastError, nextRetryAt, createdAt, updatedAt).
+  - NotificationSettings (id, userId unique, paymentEmailsEnabled, eligibilityAlertsEnabled, mutedHandlesJson, updatedAt).
+- Rewrote src/lib/notify.ts:
+  - notifyPaymentUpdate() now creates a WebhookDelivery row, performs the first POST synchronously, then on failure schedules up to 3 retries with exponential backoff (1s, 4s, 16s). Each attempt updates the row with attemptCount, status, lastError, nextRetryAt.
+  - Exported retryWebhookDelivery(deliveryId) for the /api/payments/retry endpoint.
+- Created GET /api/admin/webhooks (admin-only) listing the last 200 WebhookDelivery rows.
+- Created POST /api/payments/retry (admin-only) — body {deliveryId} — calls retryWebhookDelivery + returns the result.
+- Created GET /api/admin/emails/[id] (admin-only) returning the full EmailLog row (including body) for the email preview dialog.
+- Updated src/lib/email.ts:
+  - Added userId + handle fields to SendEmailOpts.
+  - sendEmail() now looks up NotificationSettings by userId and skips the actual send (status=suppressed) if the user opted out of payment emails, opted out of eligibility alerts, OR muted the specific handle. The suppression still writes an EmailLog row with status="suppressed" + error="user opted out" for audit.
+  - sendTemplateEmail() forwards userId + handle through to sendEmail.
+- Updated verifyPaymentInternal() in /api/payments/route.ts + /api/cron/re-audit/route.ts to pass userId + handle to sendTemplateEmail so the user's settings are honored.
+- Created GET /api/account/notifications — auto-creates default-all-on row for the user if none exists, returns the settings + muted handles array.
+- Created PATCH /api/account/notifications — updates paymentEmailsEnabled, eligibilityAlertsEnabled, mutedHandles (normalized: trim, lowercase, dedupe).
+- Added Notifications section to SettingsView with 2 shadcn Switch toggles (payment emails, eligibility alerts) + a muted-handles text input (comma-separated) + a Save button. Auto-fetches the user's settings on mount via /api/account/notifications.
+- Created GET /api/admin/metrics (admin-only) computing:
+  - KPIs: totalUsers, totalAudits, totalAttempts, totalUnlocks, verifiedAttempts, unlockRate (verified/total), avgTimeToVerifyMs (paidAt - earliest attempt createdAt), revenueLast30Days (sum of verified amounts).
+  - Daily revenue: 7-day series with per-day revenue + unlock count.
+  - Top 10 unlocked handles via Prisma groupBy on PaymentAttempt where status=verified.
+- Updated AdminView to support 5 tabs: Payments, Audit Log, Users, Webhooks, Metrics.
+  - WebhooksPanel: table of WebhookDelivery rows with status badge (delivered/pending/failed), attemptCount, lastError, createdAt, and Retry button on non-delivered rows.
+  - MetricsPanel: 8 KPI cards (Total users, Total unlocks, Unlock rate, Revenue 30d, Total audits, Total attempts, Verified attempts, Avg time-to-verify), a 7-day daily revenue bar chart (gradient from magenta to cyan, with per-day tooltip), and a Top unlocked handles table.
+- Added EmailPreviewDialog — opens when an admin clicks any email row in the Audit Log tab's Emails section OR the HandleHistoryDialog's Emails section. Fetches /api/admin/emails/[id], shows metadata header (To, Subject, Tag, Provider, Status badge with suppressed variant, When) + a sandboxed iframe rendering the email body.
+- Made email rows in AuditPanel + HandleHistoryDialog clickable (cursor-pointer + hover state).
+- Browser-verified end-to-end:
+  1. Logged in as owner@admin.local.
+  2. Settings → Notifications section visible with 2 switches + muted-handles input.
+  3. Toggled payment emails OFF, muted @prankzlife, saved → toast "Notification settings saved".
+  4. Confirmed via scripts/inspect-notif-settings.cjs that the row shows paymentEmails=false, muted=["prankzlife"].
+  5. Triggered a fresh @prankzlife payment (TXN-SUPPRESSED-001) → 30s webhook → "Payment verified!" transition.
+  6. scripts/inspect-emails-recent.cjs confirmed the latest EmailLog row has status=suppressed + error="user opted out" (vs the 2 earlier rows that were "sent" before the toggle).
+  7. Admin → Webhooks tab → showed 1 delivery record (status=failed, lastError="fetch failed", Retry button visible).
+  8. Admin → Metrics tab → 8 KPI cards populated (Total users=1, Total unlocks=3, Verified=3, Revenue 30d=$147, etc.), 7-day daily revenue bar chart (Wed=$49, Thu=$98 visible), Top unlocked handles table (@testprovider1, @test123, @prankzlife — 1 unlock each).
+  9. Admin → Audit Log tab → Emails (3) toggle → 3 email rows shown (1 suppressed, 2 sent).
+  10. Clicked first email row → EmailPreviewDialog opened with metadata header + sandboxed iframe rendering the email body.
+- Dev log: all admin endpoints returning 200.
+- Lint clean: 0 errors, 1 cosmetic warning.
+- Re-polled Stitch for variants: still 7 screens, REIMAGINE generation continues server-side.
+
+Stage Summary:
+- Admin → Audit Log → Emails rows are now clickable → opens an EmailPreviewDialog with a sandboxed iframe rendering the email body. Also added a new "Webhooks" admin tab showing all WebhookDelivery rows (status, attempts, last error) with a Retry button on failed rows.
+- Webhook delivery now has full retry with exponential backoff: 1s → 4s → 16s, max 3 attempts, with every attempt recorded in the WebhookDelivery table. Admins can manually retry failed deliveries via the Webhooks tab.
+- Per-user notification settings: users can toggle payment emails / eligibility alerts / mute specific handles in the Settings page. The settings are honored in both verifyPaymentInternal (payment-verified emails) and the cron re-audit endpoint (eligibility-alert emails). Suppressed emails still get an EmailLog row with status="suppressed" for audit.
+- Admin → Metrics tab shows 8 KPI cards (Total users, Total audits, Total attempts, Verified attempts, Total unlocks, Unlock rate, Avg time-to-verify, Revenue 30d), a 7-day daily revenue bar chart, and a Top unlocked handles table.
+- 7 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{56..62}-*.png covering settings with notifications, saved notif settings, suppressed payment verified, webhooks tab, metrics tab, audit log emails list, email preview dialog.
+- Stitch variants: dispatched, still processing server-side; re-fetch when ready.
+- Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.

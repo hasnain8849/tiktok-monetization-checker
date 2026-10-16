@@ -28,6 +28,11 @@ export interface SendEmailOpts {
   html?: string;
   /** Optional tag for the EmailLog row (e.g., "payment_verified"). */
   tag?: string;
+  /** Optional context for honoring per-user notification settings:
+   *  - userId: the recipient's user id (so we can look up their settings)
+   *  - handle: the handle this email is about (so we can check the mute list) */
+  userId?: string;
+  handle?: string;
 }
 
 interface EmailResult {
@@ -79,6 +84,45 @@ function escapeHtml(s: string): string {
 }
 
 export async function sendEmail(opts: SendEmailOpts): Promise<EmailResult> {
+  // Honor per-user notification preferences: if the user has muted the
+  // tag (payment emails or eligibility alerts) OR the specific handle,
+  // we skip the actual send but still log it as "suppressed".
+  if (opts.userId) {
+    try {
+      const settings = await db.notificationSettings.findUnique({
+        where: { userId: opts.userId },
+      });
+      if (settings) {
+        const isPaymentTag = opts.tag === "payment_verified";
+        const isAlertTag = opts.tag === "eligibility_alert";
+        const muted =
+          (isPaymentTag && !settings.paymentEmailsEnabled) ||
+          (isAlertTag && !settings.eligibilityAlertsEnabled);
+        const mutedHandles = JSON.parse(settings.mutedHandlesJson) as string[];
+        const handleMuted =
+          opts.handle &&
+          mutedHandles.includes(opts.handle.replace(/^@/, "").toLowerCase());
+        if (muted || handleMuted) {
+          await db.emailLog.create({
+            data: {
+              to: opts.to,
+              subject: opts.subject,
+              body: opts.text,
+              tag: opts.tag ?? null,
+              provider: getProviderName(),
+              status: "suppressed",
+              providerMessageId: null,
+              error: "user opted out",
+            },
+          });
+          return { ok: true, provider: getProviderName(), messageId: "suppressed" };
+        }
+      }
+    } catch (e) {
+      console.warn("notification settings check failed (continuing with send):", e);
+    }
+  }
+
   const provider = getProviderName();
   let result: EmailResult;
   try {
@@ -108,25 +152,34 @@ export async function sendEmail(opts: SendEmailOpts): Promise<EmailResult> {
 // Render a React Email template to HTML + a plain-text fallback, then send.
 // `Component` must be a React Email template component (e.g., PaymentVerifiedEmail).
 // `props` are the template's props. `subject` and `to` are the email envelope.
+// Optional `userId` and `handle` props are passed through to sendEmail so
+// notification settings can be honored.
 export async function sendTemplateEmail<P>(
   Component: React.ComponentType<P>,
-  props: P & { to?: string; subject?: string; tag?: string }
-): Promise<EmailResult> {
-  const { to, subject, tag, ...templateProps } = props as {
+  props: P & {
     to?: string;
     subject?: string;
     tag?: string;
+    userId?: string;
+    handle?: string;
+  }
+): Promise<EmailResult> {
+  const { to, subject, tag, userId, handle, ...templateProps } = props as {
+    to?: string;
+    subject?: string;
+    tag?: string;
+    userId?: string;
+    handle?: string;
   } & P;
   if (!to || !subject) {
     throw new Error("sendTemplateEmail requires `to` and `subject` props");
   }
   const element = React.createElement(Component, templateProps as P);
   const html = await render(element);
-  // Plain-text fallback: strip tags + collapse whitespace.
   const text = html
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return sendEmail({ to, subject, text, html, tag });
+  return sendEmail({ to, subject, text, html, tag, userId, handle });
 }

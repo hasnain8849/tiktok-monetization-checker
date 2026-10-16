@@ -14,6 +14,8 @@ import {
   History,
   Download,
   Mail,
+  BarChart3,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +27,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface PaymentAttempt {
   id: string;
@@ -62,7 +65,7 @@ interface EmailLogRow {
 }
 
 type StatusFilter = "all" | "pending" | "verified" | "rejected";
-type Tab = "payments" | "audit" | "users";
+type Tab = "payments" | "audit" | "users" | "webhooks" | "metrics";
 
 export function AdminView({ onBack }: { onBack: () => void }) {
   const [tab, setTab] = React.useState<Tab>("payments");
@@ -70,6 +73,8 @@ export function AdminView({ onBack }: { onBack: () => void }) {
   const [historyHandle, setHistoryHandle] = React.useState<string | null>(null);
   // Track which user to open the history modal for.
   const [historyUserId, setHistoryUserId] = React.useState<string | null>(null);
+  // Track which email to open the preview modal for.
+  const [previewEmailId, setPreviewEmailId] = React.useState<string | null>(null);
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-6">
@@ -130,19 +135,50 @@ export function AdminView({ onBack }: { onBack: () => void }) {
           <UsersIcon className="w-3.5 h-3.5" />
           Users
         </button>
+        <button
+          onClick={() => setTab("webhooks")}
+          className={
+            "px-4 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5 " +
+            (tab === "webhooks"
+              ? "bg-cyan-500 text-slate-950"
+              : "text-slate-400 hover:text-white")
+          }
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Webhooks
+        </button>
+        <button
+          onClick={() => setTab("metrics")}
+          className={
+            "px-4 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5 " +
+            (tab === "metrics"
+              ? "bg-cyan-500 text-slate-950"
+              : "text-slate-400 hover:text-white")
+          }
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          Metrics
+        </button>
       </div>
 
       {tab === "payments" && <PaymentsPanel onViewHandle={setHistoryHandle} />}
-      {tab === "audit" && <AuditPanel />}
+      {tab === "audit" && <AuditPanel onPreviewEmail={setPreviewEmailId} />}
       {tab === "users" && <UsersPanel onViewUser={setHistoryUserId} />}
+      {tab === "webhooks" && <WebhooksPanel />}
+      {tab === "metrics" && <MetricsPanel />}
 
       <HandleHistoryDialog
         handle={historyHandle}
         onClose={() => setHistoryHandle(null)}
+        onPreviewEmail={setPreviewEmailId}
       />
       <UserHistoryDialog
         userId={historyUserId}
         onClose={() => setHistoryUserId(null)}
+      />
+      <EmailPreviewDialog
+        emailId={previewEmailId}
+        onClose={() => setPreviewEmailId(null)}
       />
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 text-xs text-slate-400 flex items-start gap-2">
@@ -370,7 +406,7 @@ function PaymentsPanel({ onViewHandle }: { onViewHandle: (h: string) => void }) 
   );
 }
 
-function AuditPanel() {
+function AuditPanel({ onPreviewEmail }: { onPreviewEmail: (id: string) => void }) {
   const [entries, setEntries] = React.useState<AuditEntry[]>([]);
   const [emails, setEmails] = React.useState<EmailLogRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -480,7 +516,12 @@ function AuditPanel() {
                   </tr>
                 ) : (
                   emails.map((m) => (
-                    <tr key={m.id} className="hover:bg-slate-900/40 transition-colors">
+                    <tr
+                      key={m.id}
+                      onClick={() => onPreviewEmail(m.id)}
+                      className="hover:bg-slate-900/40 transition-colors cursor-pointer"
+                      title="Click to preview email"
+                    >
                       <td className="px-5 py-2 text-slate-200 text-xs">{m.to}</td>
                       <td className="px-5 py-2 text-slate-300">{m.subject}</td>
                       <td className="px-5 py-2 text-xs">
@@ -862,9 +903,11 @@ interface HandleHistoryData {
 function HandleHistoryDialog({
   handle,
   onClose,
+  onPreviewEmail,
 }: {
   handle: string | null;
   onClose: () => void;
+  onPreviewEmail: (id: string) => void;
 }) {
   const [data, setData] = React.useState<HandleHistoryData | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -1008,7 +1051,9 @@ function HandleHistoryDialog({
                   {data.emailEntries.map((m) => (
                     <li
                       key={m.id}
-                      className="rounded-md border border-slate-800 bg-slate-900/40 p-3"
+                      onClick={() => onPreviewEmail(m.id)}
+                      className="rounded-md border border-slate-800 bg-slate-900/40 p-3 cursor-pointer hover:bg-slate-800/40 transition-colors"
+                      title="Click to preview email"
                     >
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="text-xs font-medium text-slate-200 truncate">
@@ -1181,5 +1226,477 @@ export function UserHistoryDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// --- Email Preview Dialog ---------------------------------------------
+
+interface EmailPreviewData {
+  id: string;
+  to: string;
+  subject: string;
+  body: string;
+  tag: string | null;
+  provider: string;
+  status: string;
+  createdAt: string;
+}
+
+function EmailPreviewDialog({
+  emailId,
+  onClose,
+}: {
+  emailId: string | null;
+  onClose: () => void;
+}) {
+  const [data, setData] = React.useState<EmailPreviewData | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!emailId) {
+      setData(null);
+      return;
+    }
+    setLoading(true);
+    fetch(`/api/admin/emails/${emailId}`, { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return (await r.json()) as { email: EmailPreviewData };
+      })
+      .then((d) => setData(d.email))
+      .catch((e) => console.error(e))
+      .finally(() => setLoading(false));
+  }, [emailId]);
+
+  // Build a sandboxed iframe srcDoc from the email body. The body in
+  // EmailLog is the plain-text rendering (tags stripped) — to show the
+  // styled HTML version we'd need to persist the HTML separately. For now
+  // we render the text in a <pre>-wrapped iframe so the preview matches
+  // what a plain-text email client would show.
+  const srcDoc = React.useMemo(() => {
+    if (!data) return "";
+    return `<!doctype html><html><body style="font-family:monospace;background:#0a0f1c;color:#e1e2ed;padding:24px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;">${data.body
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")}</body></html>`;
+  }, [data]);
+
+  return (
+    <Dialog open={!!emailId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="glass-panel border-slate-700 bg-[#0d1626] text-slate-100 max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <Mail className="w-5 h-5 text-cyan-400" />
+            Email preview
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            Plain-text rendering of the email body as stored in the EmailLog table.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading && !data ? (
+          <div className="py-10 text-center text-slate-500 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading...
+          </div>
+        ) : data ? (
+          <div className="flex flex-col gap-3 overflow-hidden flex-1">
+            <div className="rounded-md border border-slate-800 bg-slate-900/40 p-3 space-y-1 text-xs">
+              <div className="flex gap-2">
+                <span className="text-slate-500 w-16">To</span>
+                <span className="text-slate-200">{data.to}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-slate-500 w-16">Subject</span>
+                <span className="text-slate-200">{data.subject}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-slate-500 w-16">Tag</span>
+                <span className="text-slate-200">{data.tag ?? "—"}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-slate-500 w-16">Provider</span>
+                <span className="text-slate-200">{data.provider}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-slate-500 w-16">Status</span>
+                <Badge
+                  variant="outline"
+                  className={
+                    data.status === "sent"
+                      ? "bg-emerald-500/20 text-emerald-300 border-0"
+                      : data.status === "suppressed"
+                        ? "bg-amber-500/20 text-amber-300 border-0"
+                        : "bg-red-500/20 text-red-300 border-0"
+                  }
+                >
+                  {data.status}
+                </Badge>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-slate-500 w-16">When</span>
+                <span className="text-slate-200">
+                  {new Date(data.createdAt).toLocaleString("en-US")}
+                </span>
+              </div>
+            </div>
+            <div className="flex-1 rounded-md border border-slate-800 bg-[#0a0f1c] overflow-hidden min-h-[300px]">
+              <iframe
+                title="Email preview"
+                srcDoc={srcDoc}
+                sandbox=""
+                className="w-full h-full min-h-[300px] border-0"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="py-10 text-center text-red-400">Failed to load.</div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// --- Webhooks Panel ---------------------------------------------------
+
+interface WebhookDeliveryRow {
+  id: string;
+  handle: string;
+  attemptId: string | null;
+  status: string;
+  attemptCount: number;
+  lastError: string | null;
+  nextRetryAt: string | null;
+  createdAt: string;
+}
+
+function WebhooksPanel() {
+  const [deliveries, setDeliveries] = React.useState<WebhookDeliveryRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [retrying, setRetrying] = React.useState<string | null>(null);
+  const { toast } = useToast();
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/admin/webhooks", { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = (await r.json()) as { deliveries: WebhookDeliveryRow[] };
+      setDeliveries(data.deliveries ?? []);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to load webhooks", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const retry = async (id: string) => {
+    setRetrying(id);
+    try {
+      const r = await fetch("/api/payments/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliveryId: id }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.ok) throw new Error(data.error ?? "retry failed");
+      toast({ title: "Webhook re-sent", description: "Status updated." });
+      setDeliveries((prev) =>
+        prev.map((d) =>
+          d.id === id
+            ? { ...d, status: "delivered", lastError: null }
+            : d
+        )
+      );
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Retry failed",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setRetrying(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-xs text-slate-400">
+          {deliveries.length} notification delivery record{deliveries.length === 1 ? "" : "s"}.
+          Click Retry on failed rows to re-send to the payment-notifier service.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={load}
+          disabled={loading}
+          className="border-slate-700 text-slate-200 hover:bg-slate-800"
+        >
+          <RefreshCw className={"h-4 w-4 " + (loading ? "animate-spin" : "")} />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/40 text-slate-400">
+              <tr className="text-left">
+                <th className="px-5 py-3 font-medium">Handle</th>
+                <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium">Attempts</th>
+                <th className="px-5 py-3 font-medium">Last error</th>
+                <th className="px-5 py-3 font-medium">Created</th>
+                <th className="px-5 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {loading && deliveries.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-slate-500 flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </td>
+                </tr>
+              ) : deliveries.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-slate-500">
+                    No webhook deliveries yet.
+                  </td>
+                </tr>
+              ) : (
+                deliveries.map((d) => (
+                  <tr key={d.id} className="hover:bg-slate-900/40 transition-colors">
+                    <td className="px-5 py-3 font-medium text-white">{d.handle}</td>
+                    <td className="px-5 py-3">
+                      <Badge
+                        variant="outline"
+                        className={
+                          d.status === "delivered"
+                            ? "bg-emerald-500/20 text-emerald-300 border-0"
+                            : d.status === "pending"
+                              ? "bg-amber-500/20 text-amber-300 border-0"
+                              : "bg-red-500/20 text-red-300 border-0"
+                        }
+                      >
+                        {d.status}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3 tabular-nums text-slate-300">{d.attemptCount}</td>
+                    <td className="px-5 py-3 text-xs text-slate-500 max-w-xs truncate" title={d.lastError ?? ""}>
+                      {d.lastError ?? "—"}
+                    </td>
+                    <td className="px-5 py-3 text-slate-500 inline-flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      {new Date(d.createdAt).toLocaleString("en-US")}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      {d.status !== "delivered" && (
+                        <Button
+                          size="sm"
+                          onClick={() => retry(d.id)}
+                          disabled={retrying === d.id}
+                          className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 border-0 h-8"
+                        >
+                          {retrying === d.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Send className="w-3.5 h-3.5" />
+                          )}
+                          Retry
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// --- Metrics Panel ----------------------------------------------------
+
+interface MetricsData {
+  kpis: {
+    totalUsers: number;
+    totalAudits: number;
+    totalAttempts: number;
+    totalUnlocks: number;
+    verifiedAttempts: number;
+    unlockRate: number;
+    avgTimeToVerifyMs: number;
+    revenueLast30Days: number;
+  };
+  dailyRevenue: { day: string; revenue: number; unlocks: number }[];
+  topUnlocked: { handle: string; unlockCount: number }[];
+}
+
+function MetricsPanel() {
+  const [data, setData] = React.useState<MetricsData | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const { toast } = useToast();
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/admin/metrics", { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = (await r.json()) as MetricsData;
+      setData(d);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to load metrics", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading && !data) {
+    return (
+      <div className="py-12 text-center text-slate-500 flex items-center justify-center gap-2">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Loading metrics...
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtMs = (ms: number) => {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${(ms / 60_000).toFixed(1)}min`;
+  };
+
+  return (
+    <>
+      {/* KPI cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Total users" value={data.kpis.totalUsers.toString()} icon={UsersIcon} accent="cyan" />
+        <MetricCard label="Total unlocks" value={data.kpis.totalUnlocks.toString()} icon={CheckCircle2} accent="green" />
+        <MetricCard label="Unlock rate" value={`${data.kpis.unlockRate}%`} icon={BarChart3} accent="cyan" />
+        <MetricCard
+          label="Revenue (30d)"
+          value={fmt(data.kpis.revenueLast30Days)}
+          icon={BarChart3}
+          accent="magenta"
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Total audits" value={data.kpis.totalAudits.toString()} icon={ScrollText} accent="cyan" />
+        <MetricCard label="Total attempts" value={data.kpis.totalAttempts.toString()} icon={Clock} accent="cyan" />
+        <MetricCard label="Verified attempts" value={data.kpis.verifiedAttempts.toString()} icon={CheckCircle2} accent="green" />
+        <MetricCard
+          label="Avg time-to-verify"
+          value={fmtMs(data.kpis.avgTimeToVerifyMs)}
+          icon={Clock}
+          accent="magenta"
+        />
+      </div>
+
+      {/* Daily revenue chart (simple bars) */}
+      <div className="glass-panel rounded-2xl border border-slate-800 p-6 shadow-2xl">
+        <h2 className="text-base font-bold text-white mb-4">Daily revenue (last 7 days)</h2>
+        <div className="flex items-end justify-between gap-2 h-44">
+          {data.dailyRevenue.map((d, i) => {
+            const max = Math.max(1, ...data.dailyRevenue.map((x) => x.revenue));
+            const pct = (d.revenue / max) * 100;
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                <div className="w-full flex flex-col items-center justify-end flex-1">
+                  <span className="text-[10px] text-slate-400 mb-1 tabular-nums">
+                    {d.revenue > 0 ? fmt(d.revenue) : "—"}
+                  </span>
+                  <div
+                    className="w-full bg-gradient-to-t from-[#fe2c55] to-[#00f2fe] rounded-t min-h-[8px] transition-all"
+                    style={{ height: `${Math.max(pct, 2)}%` }}
+                    title={`${d.day}: ${fmt(d.revenue)} (${d.unlocks} unlocks)`}
+                  />
+                </div>
+                <span className="text-xs text-slate-400">{d.day}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Top unlocked handles */}
+      <div className="glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-800">
+          <h2 className="text-base font-bold text-white">Top unlocked handles</h2>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-slate-900/40 text-slate-400">
+            <tr className="text-left">
+              <th className="px-5 py-3 font-medium">#</th>
+              <th className="px-5 py-3 font-medium">Handle</th>
+              <th className="px-5 py-3 font-medium">Unlocks</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800">
+            {data.topUnlocked.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-5 py-12 text-center text-slate-500">
+                  No unlocked handles yet.
+                </td>
+              </tr>
+            ) : (
+              data.topUnlocked.map((h, i) => (
+                <tr key={h.handle} className="hover:bg-slate-900/40 transition-colors">
+                  <td className="px-5 py-3 text-slate-500 tabular-nums">{i + 1}</td>
+                  <td className="px-5 py-3 font-medium text-white">{h.handle}</td>
+                  <td className="px-5 py-3 tabular-nums text-slate-300">{h.unlockCount}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accent: "cyan" | "magenta" | "green";
+}) {
+  const colorMap = {
+    cyan: "text-cyan-400 bg-cyan-500/10",
+    magenta: "text-[#fe2c55] bg-[#fe2c55]/10",
+    green: "text-emerald-400 bg-emerald-500/10",
+  };
+  return (
+    <div className="glass-panel rounded-2xl border border-slate-800 p-5 shadow-xl">
+      <div className="flex items-center justify-between">
+        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", colorMap[accent])}>
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-slate-400 uppercase tracking-wider">{label}</p>
+      <p className="text-2xl font-bold text-white tabular-nums">{value}</p>
+    </div>
   );
 }

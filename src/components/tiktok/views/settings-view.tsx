@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, Save, Loader2, User as UserIcon, KeyRound, Shield, Mail } from "lucide-react";
+import { ArrowLeft, Save, Loader2, User as UserIcon, KeyRound, Shield, Mail, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 
 interface AccountInfo {
@@ -26,6 +27,11 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [savingName, setSavingName] = React.useState(false);
   const [savingPwd, setSavingPwd] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Notification settings state
+  const [paymentEmailsEnabled, setPaymentEmailsEnabled] = React.useState(true);
+  const [eligibilityAlertsEnabled, setEligibilityAlertsEnabled] = React.useState(true);
+  const [mutedHandlesRaw, setMutedHandlesRaw] = React.useState("");
+  const [savingNotifs, setSavingNotifs] = React.useState(false);
   const { toast } = useToast();
 
   React.useEffect(() => {
@@ -47,6 +53,55 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       })
       .finally(() => setLoading(false));
   }, [toast, onBack]);
+
+  // Fetch notification settings in parallel.
+  React.useEffect(() => {
+    fetch("/api/account/notifications", { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) return;
+        const data = (await r.json()) as {
+          settings: {
+            paymentEmailsEnabled: boolean;
+            eligibilityAlertsEnabled: boolean;
+            mutedHandles: string[];
+          };
+        };
+        setPaymentEmailsEnabled(data.settings.paymentEmailsEnabled);
+        setEligibilityAlertsEnabled(data.settings.eligibilityAlertsEnabled);
+        setMutedHandlesRaw(data.settings.mutedHandles.join(", "));
+      })
+      .catch((e) => console.warn("notif settings fetch failed:", e));
+  }, []);
+
+  const saveNotifications = async () => {
+    setSavingNotifs(true);
+    try {
+      const mutedHandles = mutedHandlesRaw
+        .split(",")
+        .map((h) => h.trim())
+        .filter(Boolean);
+      const r = await fetch("/api/account/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentEmailsEnabled,
+          eligibilityAlertsEnabled,
+          mutedHandles,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "update failed");
+      toast({
+        title: "Notification settings saved",
+        description: "Your preferences are now active.",
+      });
+    } catch (e) {
+      console.error(e);
+      setError((e as Error).message);
+    } finally {
+      setSavingNotifs(false);
+    }
+  };
 
   const saveName = async () => {
     setError(null);
@@ -258,6 +313,72 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               <KeyRound className="w-4 h-4" />
               Change password
             </>
+          )}
+        </Button>
+      </div>
+
+      {/* Notifications form */}
+      <div className="glass-panel rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-4">
+        <h2 className="text-base font-bold text-white flex items-center gap-2">
+          <Bell className="w-4 h-4 text-cyan-400" />
+          Notification preferences
+        </h2>
+        <div className="space-y-3">
+          <label className="flex items-center justify-between gap-3 p-3 rounded-md border border-slate-800 bg-slate-900/40 cursor-pointer">
+            <div>
+              <p className="text-sm font-medium text-slate-200">Payment verification emails</p>
+              <p className="text-xs text-slate-500">
+                Sent when a payment you submitted is verified by an admin or webhook.
+              </p>
+            </div>
+            <Switch
+              checked={paymentEmailsEnabled}
+              onCheckedChange={setPaymentEmailsEnabled}
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 p-3 rounded-md border border-slate-800 bg-slate-900/40 cursor-pointer">
+            <div>
+              <p className="text-sm font-medium text-slate-200">Eligibility alert emails</p>
+              <p className="text-xs text-slate-500">
+                Sent by the scheduled re-audit job when your saved profile&apos;s
+                eligibility status changes.
+              </p>
+            </div>
+            <Switch
+              checked={eligibilityAlertsEnabled}
+              onCheckedChange={setEligibilityAlertsEnabled}
+            />
+          </label>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="muted-handles" className="text-slate-200">
+            Muted handles (comma-separated)
+          </Label>
+          <Input
+            id="muted-handles"
+            type="text"
+            value={mutedHandlesRaw}
+            onChange={(e) => setMutedHandlesRaw(e.target.value)}
+            placeholder="@prankzlife, @spamhandle"
+            className="glass-input-box text-slate-100 placeholder-slate-500 border-0 focus-visible:ring-1 focus-visible:ring-[#00f2fe]"
+          />
+          <p className="text-xs text-slate-500">
+            We won&apos;t send eligibility-alert emails for these handles. Useful
+            if you saved a profile just to track it but don&apos;t want noise.
+          </p>
+        </div>
+        <Button
+          onClick={saveNotifications}
+          disabled={savingNotifs}
+          className="gradient-btn-primary text-white font-semibold rounded-xl border-0 h-11"
+        >
+          {savingNotifs ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            "Save notification settings"
           )}
         </Button>
       </div>
