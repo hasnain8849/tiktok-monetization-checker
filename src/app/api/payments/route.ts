@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getAuthUserId } from "@/lib/auth";
 import { notifyPaymentUpdate } from "@/lib/notify";
 import { getPaymentProvider } from "@/lib/payment-provider";
+import { sendEmail } from "@/lib/email";
 
 // Bank account details shown to users who want to pay the unlock fee.
 // In a real app these would be a merchant bank account and the verification
@@ -26,7 +27,17 @@ type PaymentBody = {
 };
 
 export async function GET() {
-  return NextResponse.json({ bank: BANK_DETAILS });
+  const provider = await getPaymentProvider();
+  return NextResponse.json({
+    bank: BANK_DETAILS,
+    provider: provider.name,
+    // In stripe mode we expose the publishable key so the frontend can
+    // initialize Stripe.js with it.
+    stripePublishableKey:
+      provider.name === "stripe"
+        ? (process.env.STRIPE_PUBLISHABLE_KEY ?? null)
+        : null,
+  });
 }
 
 // POST creates a *pending* PaymentAttempt and schedules a simulated bank
@@ -153,6 +164,35 @@ export async function verifyPaymentInternal(attemptId: string) {
     status: "verified",
     attemptId,
   });
+
+  // Send a payment-verified email to the user who paid (if their account has
+  // an email). Fire-and-forget — failures are logged inside sendEmail.
+  if (attempt.userId) {
+    try {
+      const user = await db.user.findUnique({ where: { id: attempt.userId } });
+      if (user?.email) {
+        await sendEmail({
+          to: user.email,
+          subject: "Your TikTok unlock has been verified",
+          text: [
+            `Hi ${user.name ?? "there"},`,
+            ``,
+            `Your payment for ${attempt.handle} has been verified.`,
+            `Reference: ${attempt.paymentRef}`,
+            `Amount: $${attempt.amount.toFixed(2)} ${attempt.currency}`,
+            ``,
+            `You can now re-run the audit on ${attempt.handle} — it will`,
+            `show as eligible for TikTok monetization.`,
+            ``,
+            `— TikTok Monetization Checker`,
+          ].join("\n"),
+          tag: "payment_verified",
+        });
+      }
+    } catch (e) {
+      console.error("send payment-verified email failed:", e);
+    }
+  }
 
   return attempt;
 }

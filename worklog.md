@@ -407,3 +407,49 @@ Stage Summary:
 - 2 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{48,49}-*.png covering Users tab + handle history modal.
 - Stitch variants: dispatched, still processing server-side; re-fetch when ready.
 - Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.
+
+---
+Task ID: stripe-elements-user-history-email-export-10
+Agent: main
+Task: Continue all next steps: Stripe Elements on frontend for stripe mode, per-user audit history dialog, email notification abstraction with Nodemailer, CSV/JSON audit log export, re-poll Stitch.
+
+Work Log:
+- Installed @stripe/stripe-js (frontend Stripe SDK) + nodemailer + @types/nodemailer.
+- Updated GET /api/payments to return the active provider name + the Stripe publishable key (only when provider=stripe). The frontend uses this to decide whether to show bank details (simulated) or the Stripe Elements payment form (stripe).
+- Updated restricted-view.tsx:
+  - Added state for provider, stripePublishableKey, clientSecret, cardReady + a cardRef.
+  - Fetches /api/payments on mount to get provider info + bank details.
+  - When provider === "stripe" + clientSecret + stripePublishableKey are set, dynamically imports @stripe/stripe-js, calls loadStripe(publishableKey), creates an Elements instance with the clientSecret, mounts a "payment" element into cardRef.
+  - In stripe mode the bank payment card is hidden; instead the user sees a violet-themed "Secure card payment via Stripe" card with the Stripe Elements mount point. They enter their card directly into Stripe's iframe; Stripe confirms server-side and fires /api/payments/webhook which transitions the attempt to verified → the existing WebSocket listener picks up the unlock.
+  - In simulated mode (default), the existing bank-details card + payment reference input flow remains unchanged.
+- Created GET /api/admin/users/[id]/history endpoint (admin-only) returning audit-log entries where this user is the actor (actorEmail matches) AND audit-log entries targeting this user (targetId matches user.id) — gives admins both "what did this user do" and "what was done to this user" in one view.
+- Added UserHistoryDialog to admin-view.tsx — opens when an admin clicks a user's name in the Users tab. Shows the user's profile card + role badge + two sections: "Actions by this user" and "Actions against this user", each with action badge + timestamp + target/actor info. Made user names clickable in the Users tab.
+- Built email notification abstraction in src/lib/email.ts:
+  - EmailProviderName type ("console" | "smtp") selected via EMAIL_PROVIDER env var (default "console").
+  - sendConsole(): logs the email contents to the server console.
+  - sendSmtp(): lazy-imports nodemailer, creates an SMTP transport with SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS/SMTP_FROM env vars, sends via transporter.sendMail.
+  - sendEmail() always persists an EmailLog row (status, recipient, subject, body, tag, provider, messageId, error) for compliance + debugging, even when the send fails.
+- Added EmailLog Prisma model (id, to, subject, body, tag, provider, status, providerMessageId, error, createdAt) + pushed to SQLite.
+- Wired sendEmail into verifyPaymentInternal() — fires a "Your TikTok unlock has been verified" email to the user who paid (looked up by attempt.userId) with their name, handle, payment reference, amount. Tagged "payment_verified".
+- Created GET /api/admin/emails endpoint (admin-only) returning the last 200 EmailLog rows.
+- Created GET /api/admin/audit-log/export?format=csv|json endpoint (admin-only). CSV is RFC 4180 compliant (quoted fields with ""-escaped quotes, CRLF line endings). JSON is a flat array. Both return Content-Disposition: attachment headers so the browser downloads the file.
+- Added Export CSV + Export JSON + Emails toggle buttons to the Audit Log tab in AdminView. The Emails toggle expands a sub-table showing all outbound emails with To, Subject, Tag badge, Provider, Status badge (sent/failed), and When timestamp.
+- Restored NEXTAUTH_SECRET + NEXTAUTH_URL + PAYMENT_PROVIDER=simulated + EMAIL_PROVIDER=console to .env (the file had been losing these on dev-server restart). Wiped browser cookies so the user re-auths against the now-stable secret.
+- Browser-verified end-to-end:
+  1. Admin → Audit Log tab → "Emails (0)" toggle + CSV + JSON export buttons visible.
+  2. Triggered a fresh payment: @prankzlife audit → View restrictions → payment ref "TXN-EMAIL-TEST-001" → submit → waited 30s for simulated webhook → "Payment verified!" transition.
+  3. Dev log shows `[EMAIL-CONSOLE] to=owner@admin.local subject=Your TikTok unlock has been verified tag=payment_verified`.
+  4. Admin → Audit Log → Emails counter incremented to "Emails (1)".
+  5. Click Emails toggle → expanded table shows: to=owner@admin.local, subject="Your TikTok unlock has been verified", tag=payment_verified, provider=console, status=sent.
+  6. Admin → Users tab → click user name "Owner Kim" → UserHistoryDialog opens showing: USER (Owner Kim, admin badge), ACTIONS BY THIS USER (3: verify_payment on @prankzlife, settings_update x2), ACTIONS AGAINST THIS USER (2: settings_update x2 from when the user updated their own name + password).
+- Lint clean: 0 errors, 1 cosmetic warning (unused eslint-disable in apply-view).
+- Re-polled Stitch for variants: still 7 screens, REIMAGINE generation continues processing server-side.
+
+Stage Summary:
+- Frontend restricted popup now adapts to the active payment provider: simulated mode shows the bank-details card (existing flow), stripe mode shows a Stripe Elements payment form (mounts @stripe/stripe-js dynamically with the PaymentIntent clientSecret). Switching to real Stripe requires only env vars + Stripe webhook URL — the frontend already supports both.
+- Per-user audit history dialog (clickable user names in Users tab) shows both actions BY the user (verify_payment, settings_update, etc.) AND actions AGAINST the user (promote/demote, settings_update targeting them) in two sections.
+- Email notifications: every verifyPaymentInternal call fires a "payment-verified" email to the user. Console provider (default) logs the contents to stdout; SMTP provider (set EMAIL_PROVIDER=smtp + SMTP_* env vars) sends real emails via Nodemailer (Resend / SendGrid / Gmail / etc.). Every send is persisted in the EmailLog table for compliance.
+- Audit log export: admins can download all entries as CSV (RFC 4180) or JSON with one click. Useful for compliance records / external audits.
+- 4 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{50..53}-*.png covering audit log with export buttons, post-payment verification, emails tab, and user history dialog.
+- Stitch variants: dispatched, still processing server-side; re-fetch when ready.
+- Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.

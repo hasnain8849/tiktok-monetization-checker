@@ -12,6 +12,8 @@ import {
   ScrollText,
   Users as UsersIcon,
   History,
+  Download,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +48,19 @@ interface AuditEntry {
   createdAt: string;
 }
 
+interface EmailLogRow {
+  id: string;
+  to: string;
+  subject: string;
+  body: string;
+  tag: string | null;
+  provider: string;
+  status: string;
+  providerMessageId: string | null;
+  error: string | null;
+  createdAt: string;
+}
+
 type StatusFilter = "all" | "pending" | "verified" | "rejected";
 type Tab = "payments" | "audit" | "users";
 
@@ -53,6 +68,8 @@ export function AdminView({ onBack }: { onBack: () => void }) {
   const [tab, setTab] = React.useState<Tab>("payments");
   // Track which handle to open the history modal for.
   const [historyHandle, setHistoryHandle] = React.useState<string | null>(null);
+  // Track which user to open the history modal for.
+  const [historyUserId, setHistoryUserId] = React.useState<string | null>(null);
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-6">
@@ -117,11 +134,15 @@ export function AdminView({ onBack }: { onBack: () => void }) {
 
       {tab === "payments" && <PaymentsPanel onViewHandle={setHistoryHandle} />}
       {tab === "audit" && <AuditPanel />}
-      {tab === "users" && <UsersPanel />}
+      {tab === "users" && <UsersPanel onViewUser={setHistoryUserId} />}
 
       <HandleHistoryDialog
         handle={historyHandle}
         onClose={() => setHistoryHandle(null)}
+      />
+      <UserHistoryDialog
+        userId={historyUserId}
+        onClose={() => setHistoryUserId(null)}
       />
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 text-xs text-slate-400 flex items-start gap-2">
@@ -351,22 +372,29 @@ function PaymentsPanel({ onViewHandle }: { onViewHandle: (h: string) => void }) 
 
 function AuditPanel() {
   const [entries, setEntries] = React.useState<AuditEntry[]>([]);
+  const [emails, setEmails] = React.useState<EmailLogRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [showEmails, setShowEmails] = React.useState(false);
   const { toast } = useToast();
 
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/admin/audit-log", { cache: "no-store" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = (await r.json()) as { entries: AuditEntry[] };
-      setEntries(data.entries ?? []);
+      const [auditR, emailR] = await Promise.all([
+        fetch("/api/admin/audit-log", { cache: "no-store" }),
+        fetch("/api/admin/emails", { cache: "no-store" }),
+      ]);
+      if (auditR.ok) {
+        const data = (await auditR.json()) as { entries: AuditEntry[] };
+        setEntries(data.entries ?? []);
+      }
+      if (emailR.ok) {
+        const edata = (await emailR.json()) as { emails: EmailLogRow[] };
+        setEmails(edata.emails ?? []);
+      }
     } catch (e) {
       console.error(e);
-      toast({
-        title: "Failed to load audit log",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to load audit log", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -376,6 +404,9 @@ function AuditPanel() {
     load();
   }, [load]);
 
+  const exportUrl = (format: "csv" | "json") =>
+    `/api/admin/audit-log/export?format=${format}`;
+
   return (
     <>
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -383,17 +414,105 @@ function AuditPanel() {
           Every admin action (verify, reject, etc.) is recorded here with the
           actor&apos;s email, the action taken, and the target.
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={load}
-          disabled={loading}
-          className="border-slate-700 text-slate-200 hover:bg-slate-800"
-        >
-          <RefreshCw className={"h-4 w-4 " + (loading ? "animate-spin" : "")} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowEmails((v) => !v)}
+            className="border-slate-700 text-slate-200 hover:bg-slate-800"
+          >
+            <Mail className="h-4 w-4" />
+            Emails ({emails.length})
+          </Button>
+          <a
+            href={exportUrl("csv")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
+            download
+          >
+            <Download className="h-3.5 w-3.5" />
+            CSV
+          </a>
+          <a
+            href={exportUrl("json")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
+            download
+          >
+            <Download className="h-3.5 w-3.5" />
+            JSON
+          </a>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={load}
+            disabled={loading}
+            className="border-slate-700 text-slate-200 hover:bg-slate-800"
+          >
+            <RefreshCw className={"h-4 w-4 " + (loading ? "animate-spin" : "")} />
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {showEmails && (
+        <div className="glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-2">
+            <Mail className="w-3.5 h-3.5" />
+            Outbound emails ({emails.length})
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900/40 text-slate-400">
+                <tr className="text-left">
+                  <th className="px-5 py-2 font-medium">To</th>
+                  <th className="px-5 py-2 font-medium">Subject</th>
+                  <th className="px-5 py-2 font-medium">Tag</th>
+                  <th className="px-5 py-2 font-medium">Provider</th>
+                  <th className="px-5 py-2 font-medium">Status</th>
+                  <th className="px-5 py-2 font-medium">When</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {emails.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-8 text-center text-slate-500">
+                      No emails sent yet.
+                    </td>
+                  </tr>
+                ) : (
+                  emails.map((m) => (
+                    <tr key={m.id} className="hover:bg-slate-900/40 transition-colors">
+                      <td className="px-5 py-2 text-slate-200 text-xs">{m.to}</td>
+                      <td className="px-5 py-2 text-slate-300">{m.subject}</td>
+                      <td className="px-5 py-2 text-xs">
+                        <Badge variant="outline" className="bg-slate-700/40 text-slate-300 border-0">
+                          {m.tag ?? "—"}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-2 text-xs text-slate-500">{m.provider}</td>
+                      <td className="px-5 py-2 text-xs">
+                        <Badge
+                          variant="outline"
+                          className={
+                            m.status === "sent"
+                              ? "bg-emerald-500/20 text-emerald-300 border-0"
+                              : "bg-red-500/20 text-red-300 border-0"
+                          }
+                        >
+                          {m.status}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-2 text-xs text-slate-500 inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {new Date(m.createdAt).toLocaleString("en-US")}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
         <div className="overflow-x-auto">
@@ -551,7 +670,7 @@ interface AdminUser {
   unlockCount: number;
 }
 
-function UsersPanel() {
+function UsersPanel({ onViewUser }: { onViewUser: (id: string) => void }) {
   const [users, setUsers] = React.useState<AdminUser[]>([]);
   const [loading, setLoading] = React.useState(true);
   const { toast } = useToast();
@@ -656,7 +775,14 @@ function UsersPanel() {
                           {(u.name ?? u.email).slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-medium text-white">{u.name ?? "—"}</p>
+                          <button
+                            onClick={() => onViewUser(u.id)}
+                            className="font-medium text-white hover:text-cyan-300 transition-colors inline-flex items-center gap-1"
+                            title="View user history"
+                          >
+                            {u.name ?? "—"}
+                            <History className="w-3 h-3 opacity-60" />
+                          </button>
                           <p className="text-xs text-slate-500">{u.email}</p>
                           {!u.hasPassword && (
                             <span className="text-[10px] text-amber-400 inline-block mt-0.5">
@@ -851,6 +977,132 @@ function HandleHistoryDialog({
               ) : (
                 <ul className="space-y-1.5">
                   {data.auditEntries.map((e) => (
+                    <li
+                      key={e.id}
+                      className="rounded-md border border-slate-800 bg-slate-900/40 p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <ActionBadge action={e.action} />
+                        <span className="text-xs text-slate-500">
+                          {new Date(e.createdAt).toLocaleString("en-US")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">by {e.actorEmail}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-10 text-center text-red-400">Failed to load.</div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface UserHistoryData {
+  user: { id: string; email: string; name: string | null; role: string };
+  byThisUser: AuditEntry[];
+  againstThisUser: AuditEntry[];
+}
+
+export function UserHistoryDialog({
+  userId,
+  onClose,
+}: {
+  userId: string | null;
+  onClose: () => void;
+}) {
+  const [data, setData] = React.useState<UserHistoryData | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!userId) {
+      setData(null);
+      return;
+    }
+    setLoading(true);
+    fetch(`/api/admin/users/${userId}/history`, { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return (await r.json()) as UserHistoryData;
+      })
+      .then((d) => setData(d))
+      .catch((e) => console.error(e))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  return (
+    <Dialog open={!!userId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="glass-panel border-slate-700 bg-[#0d1626] text-slate-100 max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <UsersIcon className="w-5 h-5 text-cyan-400" />
+            User history: {data?.user.email ?? "…"}
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            Actions by this user and actions targeting this user (promote / demote / settings_update).
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading && !data ? (
+          <div className="py-10 text-center text-slate-500 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading...
+          </div>
+        ) : data ? (
+          <div className="space-y-5">
+            <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wide">User</p>
+                <p className="text-sm font-medium text-white">{data.user.name ?? "—"}</p>
+                <p className="text-xs text-slate-400">{data.user.email}</p>
+              </div>
+              <RoleBadge role={data.user.role} />
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                Actions by this user ({data.byThisUser.length})
+              </p>
+              {data.byThisUser.length === 0 ? (
+                <p className="text-xs text-slate-500 py-3 text-center">No actions.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {data.byThisUser.map((e) => (
+                    <li
+                      key={e.id}
+                      className="rounded-md border border-slate-800 bg-slate-900/40 p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <ActionBadge action={e.action} />
+                        <span className="text-xs text-slate-500">
+                          {new Date(e.createdAt).toLocaleString("en-US")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        on {e.targetType}
+                        {e.targetHandle && (
+                          <span className="ml-1 text-cyan-300">{e.targetHandle}</span>
+                        )}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                Actions against this user ({data.againstThisUser.length})
+              </p>
+              {data.againstThisUser.length === 0 ? (
+                <p className="text-xs text-slate-500 py-3 text-center">No actions.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {data.againstThisUser.map((e) => (
                     <li
                       key={e.id}
                       className="rounded-md border border-slate-800 bg-slate-900/40 p-3"

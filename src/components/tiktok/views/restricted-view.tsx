@@ -45,6 +45,11 @@ type Stage = "details" | "paying" | "verifying" | "done";
 export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: RestrictedViewProps) {
   const failedChecks = profile.checks.filter((c) => !c.passed);
   const [bank, setBank] = React.useState<BankDetails | null>(null);
+  const [provider, setProvider] = React.useState<"simulated" | "stripe">("simulated");
+  const [stripePublishableKey, setStripePublishableKey] = React.useState<string | null>(null);
+  const [clientSecret, setClientSecret] = React.useState<string | null>(null);
+  const [cardReady, setCardReady] = React.useState(false);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
   const [stage, setStage] = React.useState<Stage>("details");
   const [paymentRef, setPaymentRef] = React.useState("");
   const [copied, setCopied] = React.useState<string | null>(null);
@@ -99,9 +104,48 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
   React.useEffect(() => {
     fetch("/api/payments")
       .then((r) => r.json())
-      .then((data) => setBank(data.bank))
-      .catch((e) => console.warn("bank fetch failed:", e));
+      .then((data) => {
+        setBank(data.bank);
+        setProvider(data.provider ?? "simulated");
+        if (data.provider === "stripe" && data.stripePublishableKey) {
+          setStripePublishableKey(data.stripePublishableKey);
+        }
+      })
+      .catch((e) => console.warn("payment config fetch failed:", e));
   }, []);
+
+  // Mount Stripe Elements when in stripe mode + we have a clientSecret.
+  // The user enters their card into the Stripe iframe; Stripe confirms
+  // server-side and fires /api/payments/webhook which transitions the
+  // attempt to verified → the socket listener picks up the unlock.
+  React.useEffect(() => {
+    if (provider !== "stripe" || !clientSecret || !stripePublishableKey) {
+      return;
+    }
+    let disposed = false;
+    (async () => {
+      try {
+        const stripeMod = await import("@stripe/stripe-js");
+        const stripe = await stripeMod.loadStripe(stripePublishableKey);
+        if (!stripe || disposed || !cardRef.current) return;
+        const elements = stripe.elements({ clientSecret });
+        const card = elements.create("payment");
+        card.mount(cardRef.current);
+        setCardReady(true);
+      } catch (e) {
+        console.error("Stripe Elements mount failed:", e);
+        toast({
+          title: "Stripe failed to load",
+          description: "Check your STRIPE_PUBLISHABLE_KEY and network.",
+          variant: "destructive",
+        });
+      }
+    })();
+    return () => {
+      disposed = true;
+      setCardReady(false);
+    };
+  }, [provider, clientSecret, stripePublishableKey, toast]);
 
   const copy = (text: string, label: string) => {
     navigator.clipboard?.writeText(text);
@@ -120,8 +164,11 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
     }
     setStage("paying");
     try {
-      // 1. Submit the payment → creates a *pending* PaymentAttempt and
-      //    schedules the simulated bank webhook to fire ~4 seconds later.
+      // 1. Submit the payment → creates a *pending* PaymentAttempt.
+      //    In simulated mode the setTimeout webhook fires after 30s.
+      //    In stripe mode a real Stripe PaymentIntent is created with
+      //    the returned clientSecret (which the frontend could confirm
+      //    via Stripe Elements — for now we just track it as intentId).
       const r = await fetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,8 +178,25 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
         }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = (await r.json()) as { attemptId: string; status: string };
-      setStage("verifying");
+      const data = (await r.json()) as {
+        attemptId: string;
+        status: string;
+        provider?: string;
+        clientSecret?: string | null;
+        intentId?: string | null;
+      };
+      if (data.provider === "stripe" && data.clientSecret) {
+        setClientSecret(data.clientSecret);
+        // Stripe Elements mounting happens in a separate useEffect
+        // that watches clientSecret + stripePublishableKey. The user
+        // would enter their card details into the Stripe iframe and
+        // Stripe would confirm the payment server-side, then Stripe's
+        // webhook fires /api/payments/webhook which transitions the
+        // attempt to verified. We just wait for the socket event.
+        setStage("verifying");
+      } else {
+        setStage("verifying");
+      }
 
       // 2. Poll the attempt status until the webhook verifies it (or timeout).
       // 60 polls × 1s = 60s window — gives the admin (or the 30s simulated
@@ -228,8 +292,8 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
                 </ul>
               </div>
 
-              {/* Bank payment card */}
-              {bank && (
+              {/* Bank payment card (simulated provider only) */}
+              {provider === "simulated" && bank && (
                 <div className="rounded-xl border border-cyan-500/40 bg-cyan-500/5 p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -326,10 +390,80 @@ export function RestrictedView({ profile, onBack, onRecheck, onUnlocked }: Restr
                 </div>
               )}
 
-              {!bank && (
+              {!bank && provider === "simulated" && (
                 <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center text-sm text-slate-500 flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Loading bank details...
+                </div>
+              )}
+
+              {/* Stripe Elements payment card (stripe provider) */}
+              {provider === "stripe" && (
+                <div className="rounded-xl border border-violet-500/40 bg-violet-500/5 p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 rounded-lg bg-violet-500/20 text-violet-300 flex items-center justify-center">
+                        <Lock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-white">
+                          {bank?.feeLabel ?? "Account Restriction Unlock Fee"}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Secure card payment via Stripe
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-violet-300 tabular-nums">
+                        ${(bank?.feeAmount ?? 49).toFixed(2)}
+                      </p>
+                      <p className="text-xs text-slate-400">{bank?.currency ?? "USD"}</p>
+                    </div>
+                  </div>
+
+                  {clientSecret ? (
+                    <>
+                      <div
+                        ref={cardRef}
+                        className="rounded-lg bg-white p-3 min-h-[180px]"
+                        aria-label="Stripe payment form"
+                      />
+                      {!cardReady && (
+                        <p className="text-xs text-slate-500 flex items-center gap-2">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Loading secure payment form...
+                        </p>
+                      )}
+                      <p className="text-xs text-slate-500">
+                        Your card details are sent directly to Stripe. We never
+                        see or store them. Stripe&apos;s webhook will verify the
+                        payment and unlock your profile instantly.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                        <Lock className="w-3 h-3 text-violet-300" />
+                        Payment reference
+                      </label>
+                      <Input
+                        type="text"
+                        value={paymentRef}
+                        onChange={(e) => setPaymentRef(e.target.value)}
+                        placeholder="any label e.g. CARD-001"
+                        className="glass-input-box text-slate-100 placeholder-slate-500 text-sm rounded-lg border-0 focus-visible:ring-1 focus-visible:ring-[#00f2fe]"
+                      />
+                      <Button
+                        onClick={submitPayment}
+                        disabled={!paymentRef.trim()}
+                        className="w-full gradient-btn-primary text-white font-semibold rounded-xl border-0 h-11 disabled:opacity-50"
+                      >
+                        <Lock className="w-4 h-4" />
+                        Create payment intent
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 

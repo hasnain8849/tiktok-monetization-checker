@@ -106,3 +106,18 @@ model AuditLog {
   metadata    String   @default("{}") // JSON blob for extra context
   createdAt   DateTime @default(now())
 }
+
+// Outbound emails — every sendEmail() call writes a row here so the admin
+// can audit every email we sent to users.
+model EmailLog {
+  id               String   @id @default(cuid())
+  to               String
+  subject          String
+  body             String
+  tag              String?  // e.g., "payment_verified"
+  provider         String   // "console" | "smtp"
+  status           String   // "sent" | "failed"
+  providerMessageId String?
+  error            String?
+  createdAt        DateTime @default(now())
+}
