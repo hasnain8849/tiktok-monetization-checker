@@ -96,6 +96,16 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
+        // 2FA enforcement for admin accounts: if the user is an admin AND
+        // doesn't have 2FA enabled, refuse the login and prompt them to
+        // set it up. This prevents the most-privileged accounts from being
+        // accessed with just a stolen password.
+        if (user.role === "admin" && !twoFactor?.verifiedAt) {
+          throw new Error(
+            "Admin accounts must enable 2FA before logging in. Sign in once as a non-admin, or ask another admin to disable the admin role temporarily, then set up 2FA from Settings."
+          );
+        }
+
         return {
           id: user.id,
           email: user.email,

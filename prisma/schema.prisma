@@ -164,3 +164,17 @@ model TwoFactor {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
+
+// Public share tokens for profile audit summaries. Lets a user generate
+// a read-only URL that anyone can use to view a snapshot of an audit's
+// result (handle, metrics, eligibility checks) without needing to log in.
+model ShareToken {
+  id          String   @id @default(cuid())
+  token       String   @unique  // the public URL slug (cryptographically random)
+  handle      String             // the audited handle
+  userId      String?            // who created the share (for revoke + audit)
+  snapshotJson String           // JSON snapshot of the audit at creation time
+  expiresAt   DateTime?          // optional expiry (null = never expires)
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+}

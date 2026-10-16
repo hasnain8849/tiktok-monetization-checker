@@ -11,6 +11,7 @@ import { DashboardView } from "@/components/tiktok/views/dashboard-view";
 import { AdminView } from "@/components/tiktok/views/admin-view";
 import { SettingsView } from "@/components/tiktok/views/settings-view";
 import { StripeDocsView } from "@/components/tiktok/views/stripe-docs-view";
+import { SharedProfileView } from "@/components/tiktok/views/shared-profile-view";
 import { type Profile } from "@/lib/tiktok-data";
 
 type Screen =
@@ -22,7 +23,8 @@ type Screen =
   | { kind: "dashboard" }
   | { kind: "admin" }
   | { kind: "settings" }
-  | { kind: "stripe-docs" };
+  | { kind: "stripe-docs" }
+  | { kind: "shared-profile"; token: string };
 
 // ViewKey adds an "admin" type that is only shown when the session user is an admin.
 export type AppViewKey = ViewKey | "admin";
@@ -34,6 +36,32 @@ export default function Home() {
   const goAdmin = React.useCallback(() => setScreen({ kind: "admin" }), []);
   const goSettings = React.useCallback(() => setScreen({ kind: "settings" }), []);
   const goStripeDocs = React.useCallback(() => setScreen({ kind: "stripe-docs" }), []);
+
+  // Share an audit profile: POSTs to /api/profiles/[handle]/share, gets a
+  // token back, opens the SharedProfileView with that token.
+  const shareProfile = React.useCallback(async (p: Profile) => {
+    try {
+      const r = await fetch(`/api/profiles/${encodeURIComponent(p.handle)}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.token) {
+        throw new Error(data.error ?? "share failed");
+      }
+      const shareUrl = `${window.location.origin}/share/${data.token}`;
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+      } catch {
+        // Clipboard may be unavailable in some sandboxed contexts — non-fatal.
+      }
+      setScreen({ kind: "shared-profile", token: data.token });
+    } catch (e) {
+      console.error("share failed:", e);
+      // Fall back to a toast or alert — for now, just console.error.
+    }
+  }, []);
 
   const navigate = (v: ViewKey) => {
     if (v === "landing") setScreen({ kind: "landing" });
@@ -90,6 +118,7 @@ export default function Home() {
             onBack={() => setScreen({ kind: "landing" })}
             onApply={(p) => setScreen({ kind: "apply", profile: p })}
             onUnlock={(p) => setScreen({ kind: "restricted", profile: p })}
+            onShare={shareProfile}
           />
         )}
         {screen.kind === "apply" && (
@@ -127,6 +156,12 @@ export default function Home() {
         )}
         {screen.kind === "stripe-docs" && (
           <StripeDocsView onBack={() => setScreen({ kind: "landing" })} />
+        )}
+        {screen.kind === "shared-profile" && (
+          <SharedProfileView
+            token={screen.token}
+            onBack={() => setScreen({ kind: "landing" })}
+          />
         )}
       </main>
       <Footer onNavigate={navigate} />

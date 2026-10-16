@@ -45,6 +45,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [backupCodes, setBackupCodes] = React.useState<string[] | null>(null);
   const [disableCode, setDisableCode] = React.useState("");
   const [disabling, setDisabling] = React.useState(false);
+  const [regenCode, setRegenCode] = React.useState("");
+  const [regenerating, setRegenerating] = React.useState(false);
   const { toast } = useToast();
 
   React.useEffect(() => {
@@ -170,6 +172,35 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       setError((e as Error).message);
     } finally {
       setDisabling(false);
+    }
+  };
+
+  const regenerateBackupCodes = async () => {
+    if (!regenCode.trim()) {
+      setError("Enter a TOTP code or remaining backup code to regenerate backup codes");
+      return;
+    }
+    setRegenerating(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/account/2fa/regenerate-backup-codes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: regenCode.trim() }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "regenerate failed");
+      setBackupCodes(data.backupCodes as string[]);
+      setRegenCode("");
+      toast({
+        title: "Backup codes regenerated",
+        description: "Save these new codes — they will only be shown once.",
+      });
+    } catch (e) {
+      console.error(e);
+      setError((e as Error).message);
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -540,6 +571,39 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   "Disable 2FA"
                 )}
               </Button>
+            </div>
+
+            {/* Regenerate backup codes */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <Label htmlFor="regen-2fa" className="text-slate-200">
+                Regenerate backup codes
+              </Label>
+              <p className="text-xs text-slate-500">
+                If your backup codes are lost or used up, generate a fresh
+                set. The old codes will be invalidated.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  id="regen-2fa"
+                  type="text"
+                  value={regenCode}
+                  onChange={(e) => setRegenCode(e.target.value)}
+                  placeholder="TOTP code or remaining backup code"
+                  className="glass-input-box text-slate-100 placeholder-slate-500 border-0 focus-visible:ring-1 focus-visible:ring-[#00f2fe]"
+                />
+                <Button
+                  onClick={regenerateBackupCodes}
+                  disabled={regenerating || !regenCode.trim()}
+                  variant="outline"
+                  className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10 h-11 shrink-0"
+                >
+                  {regenerating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Regenerate"
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         ) : setupData ? (

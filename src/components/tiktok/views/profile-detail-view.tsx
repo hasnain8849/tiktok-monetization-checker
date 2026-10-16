@@ -17,6 +17,7 @@ import {
   Play,
   Lock,
   ShieldAlert,
+  Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,9 +35,10 @@ interface ProfileDetailProps {
   onBack: () => void;
   onApply: (p: Profile) => void;
   onUnlock: (p: Profile) => void;
+  onShare?: (p: Profile) => void;
 }
 
-export function ProfileDetailView({ profile, onBack, onApply, onUnlock }: ProfileDetailProps) {
+export function ProfileDetailView({ profile, onBack, onApply, onUnlock, onShare }: ProfileDetailProps) {
   const passedCount = profile.checks.filter((c) => c.passed).length;
   const allPassed = passedCount === profile.checks.length;
   const isRestricted = profile.checks.some(
@@ -52,6 +54,18 @@ export function ProfileDetailView({ profile, onBack, onApply, onUnlock }: Profil
         <ArrowLeft className="h-4 w-4" />
         Back
       </button>
+
+      {onShare && (
+        <div className="flex justify-end -mt-4">
+          <button
+            onClick={() => onShare(profile)}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/5 text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            Share audit
+          </button>
+        </div>
+      )}
 
       {/* Header */}
       <div className="glass-panel rounded-2xl border border-slate-800 p-6 sm:p-8 shadow-2xl">

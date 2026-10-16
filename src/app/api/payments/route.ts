@@ -5,6 +5,7 @@ import { notifyPaymentUpdate } from "@/lib/notify";
 import { getPaymentProvider } from "@/lib/payment-provider";
 import { sendTemplateEmail } from "@/lib/email";
 import PaymentVerifiedEmail from "@/emails/payment-verified-email";
+import { rateLimit, getRequestKey } from "@/lib/rate-limit";
 
 // Bank account details shown to users who want to pay the unlock fee.
 // In a real app these would be a merchant bank account and the verification
@@ -49,6 +50,23 @@ export async function GET() {
 // /api/payments/webhook endpoint asynchronously. We simulate it here so the
 // demo is self-contained.
 export async function POST(req: NextRequest) {
+  // Rate-limit: 5 payment attempts per minute per IP. Prevents a single
+  // attacker from creating thousands of pending PaymentAttempt rows.
+  const rl = rateLimit({
+    key: getRequestKey(req, "payments-post"),
+    maxRequests: 5,
+    windowMs: 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: "Too many payment attempts. Try again in a minute.",
+        resetAt: rl.resetAt,
+      },
+      { status: 429 }
+    );
+  }
+
   try {
     const userId = await getAuthUserId();
     const body = (await req.json()) as PaymentBody;

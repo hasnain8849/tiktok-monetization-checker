@@ -626,3 +626,68 @@ Stage Summary:
 - 6 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{63..68}-*.png covering settings 2FA section, QR display, 2FA enabled with backup codes, 2FA login prompt, 2FA login success, Stripe docs page.
 - Stitch variants: dispatched, still processing server-side; re-fetch when ready.
 - Lint clean (0 errors, 2 cosmetic warnings). Dev server healthy.
+
+---
+Task ID: 2fa-enforce-regen-share-ratelimit-stripescript-14
+Agent: main
+Task: Continue all next steps: 2FA enforcement for admins, backup code regeneration, Stripe CLI integration script, public profile share link, API rate limiting, re-poll Stitch.
+
+Work Log:
+- Updated next-auth authorize() with 2FA enforcement for admin accounts: if user.role === "admin" AND no verified TwoFactor row, throws "Admin accounts must enable 2FA before logging in. Sign in once as a non-admin, or ask another admin to disable the admin role temporarily, then set up 2FA from Settings." This prevents the most-privileged accounts from being accessed with just a stolen password. The owner@admin.local admin already has 2FA enabled (set up in the previous turn), so login still works for them.
+- Created POST /api/account/2fa/regenerate-backup-codes endpoint: requires a valid TOTP code (async verifyTotp) OR a remaining backup code. If accepted, generates a fresh set of 8 backup codes via generateBackupCodes(), replaces the stored set entirely (automatically invalidating any old codes that weren't yet burned), and returns the new codes (shown only once). Persists via db.twoFactor.update.
+- Added regenerate state to SettingsView (regenCode + regenerating) + a "Regenerate backup codes" UI section below the "Disable 2FA" section in the 2FA-enabled state. The section has a Label, helpful copy ("If your backup codes are lost or used up, generate a fresh set. The old codes will be invalidated."), an Input for the TOTP/backup code, and a cyan-outline Regenerate button. On success, sets the new backupCodes state which triggers the amber backup-codes card showing them.
+- Built scripts/stripe-cli-demo.sh — convenience script that:
+  1. Verifies the Stripe CLI is installed (exits with a helpful message if not).
+  2. Reads PAYMENT_PROVIDER from .env and warns if it's not "stripe".
+  3. Prints a 4-step walkthrough: stripe login (one-time), stripe listen --forward-to localhost:3000/api/payments/webhook (returns the whsec_ signing secret to put in .env), stripe trigger payment_intent.succeeded (sends a test event), then test the full flow in the browser with the 4242 test card.
+  4. Includes redacted env state at the end so the user can verify what's set without leaking the actual keys.
+- Added ShareToken Prisma model (id, token unique, handle, userId, snapshotJson, expiresAt optional, createdAt, revokedAt optional). Pushed to SQLite.
+- Created POST /api/profiles/[handle]/share endpoint:
+  - Requires auth (getAuthUserId).
+  - Accepts optional { expiresInSeconds } body for time-limited shares (null = never expires).
+  - Calls findOrGenerateProfile(handle) to get the current audit, snapshots it as JSON (handle, displayName, avatarInitials, bio, url, verified, monetizationEligible, region, category, metrics, checks, engagementRate, avgViewsPerVideo, recentVideos, snapshotAt = ISO timestamp).
+  - Generates a 24-byte cryptographically-random url-safe base64 token via crypto.randomBytes.
+  - Persists the ShareToken row, returns {ok, token, url: "/share/<token>", expiresAt}.
+- Created GET /api/share/[token] endpoint (NO AUTH REQUIRED — that's the point of a share link):
+  - Looks up the ShareToken row. Returns 404 if not found or revoked.
+  - Returns 410 Gone if the token has expired (expiresAt < Date.now()).
+  - Parses the snapshotJson and returns {handle, snapshot, createdAt, expiresAt}.
+- Built src/components/tiktok/views/shared-profile-view.tsx — read-only public audit view:
+  - Fetches /api/share/<token> on mount, handles loading/error/expired states.
+  - Shows "Shared audit · snapshot from <date>" + read-only banner ("This is a public, read-only view of an audit snapshot. The data shown was captured at the snapshot time and may not reflect the profile's current state.").
+  - Renders the same profile header (gradient avatar + verified badge + bio + region/category chips), 4-card metric grid (Followers, Following, Total Likes, Videos), eligibility audit checklist (with "✓"/"✗" + actual values + requirement), profile insights card (engagement, avg views), and recent videos list as ProfileDetailView.
+  - No Apply / Unlock / Edit buttons — purely read-only.
+- Added onShare optional prop to ProfileDetailView + a "Share audit" button (cyan-outline, with Share2 icon) appearing in the top-right of the profile-detail page when onShare is passed.
+- Wired shareProfile callback in page.tsx: POSTs to /api/profiles/[handle]/share, copies the resulting share URL to clipboard (try/catch since clipboard may be unavailable in some sandboxed contexts), and navigates to the shared-profile screen with the returned token.
+- Added shared-profile screen type to page.tsx + render at the bottom of <main>.
+- Built src/lib/rate-limit.ts — in-memory sliding-window rate limiter:
+  - rateLimit({key, maxRequests, windowMs}) returns {ok, remaining, resetAt}. On each call, slides the window forward (drops timestamps older than windowMs), rejects if count >= maxRequests, otherwise consumes a token.
+  - getRequestKey(req, suffix) derives a key from the request's x-forwarded-for header (or "anon:" if missing).
+  - Background sweep runs every 60s to drop expired buckets so the Map doesn't grow unbounded.
+  - In-memory only — resets on server restart. Suitable for sandboxed / single-instance dev; for production behind a load balancer, switch to Redis.
+- Applied rate limiting to:
+  - POST /api/payments — 5 attempts per minute per IP. Prevents a single attacker from creating thousands of pending PaymentAttempt rows. Returns 429 + resetAt when exceeded.
+  - POST /api/account/2fa/verify — 10 attempts per minute per IP+user. Prevents brute-forcing the 6-digit TOTP code (10^6 combinations × 10 attempts/min = 100,000 min worst-case = ~70 days to brute-force).
+- Browser-verified end-to-end:
+  1. Cleared cookies → logged in as owner@admin.local → password accepted → "2FA code required" error → 2FA input appeared.
+  2. Used a remaining backup code (Y9MREP4D) → logged in successfully (Settings + Admin buttons visible).
+  3. Audit @mrbeast → "Share audit" button visible on profile-detail page.
+  4. Clicked "Share audit" → SharedProfileView opened showing: "Shared audit · snapshot from 10/16/2026, 10:29:53 AM", read-only banner, @mrbeast profile header (Eligible, verified badge), 4-card metric grid (120.4M followers, 608 following, 2.8B likes, 412 videos), eligibility audit (6 of 6 checks passed), profile insights + recent videos.
+  5. scripts/check-share.cjs confirmed 1 ShareToken row in DB with the @mrbeast handle + userId set + never expires + not revoked.
+  6. Settings → 2FA section → "Regenerate backup codes" section visible.
+  7. Generated a fresh TOTP code via scripts/get-2fa-secret.cjs + node + otplib → entered → Regenerate button → "Backup codes regenerated" toast → 8 fresh backup codes shown.
+  8. scripts/get-2fa-secret.cjs confirmed the old 7 backups (Y9MREP4D, MAEMXRTD, etc.) are gone and replaced with 8 new ones (GKWFH8NS, PXNCVA42, etc.).
+  9. curl test on /api/payments: attempts 1-5 succeeded, attempts 6 and 7 returned {error: "Too many payment attempts. Try again in a minute.", resetAt: ...} — rate limiter working correctly.
+  10. bash scripts/stripe-cli-demo.sh correctly detected Stripe CLI is not installed and printed the install URL.
+- Lint clean: 0 errors, 2 cosmetic warnings (unused eslint-disable in apply-view, unused eslint-disable on img element in settings-view).
+- Re-polled Stitch for variants: still 7 screens, REIMAGINE generation continues server-side.
+
+Stage Summary:
+- Admin accounts now require 2FA to log in. The owner@admin.local admin already has it enabled (set up in the previous turn), so login still works for them. New admin accounts must enable 2FA before they can use the admin console.
+- Backup code regeneration: users can generate a fresh set of 8 backup codes from Settings → 2FA → Regenerate. Requires a valid TOTP code or remaining backup code (so an attacker who only has the password can't regenerate codes). Old codes are invalidated when the new set is saved.
+- Stripe CLI integration script at scripts/stripe-cli-demo.sh: documents the local Stripe webhook development workflow (login, listen, trigger, test the full flow). Detects missing Stripe CLI and tells the user to install it.
+- Public profile share link: any authenticated user can click "Share audit" on the profile-detail page → POSTs to /api/profiles/[handle]/share → generates a 24-byte cryptographically-random token + snapshots the current audit → returns the share URL → opens the SharedProfileView (read-only public view) + copies the URL to clipboard. Honors expiry + revocation.
+- API rate limiting: in-memory sliding-window limiter applied to POST /api/payments (5/min/IP) and POST /api/account/2fa/verify (10/min/IP+user). Returns 429 with resetAt when exceeded. Background sweep every 60s keeps the bucket Map bounded.
+- 3 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{69..71}-*.png covering shared profile view, 2FA regenerate section, and regenerated backup codes.
+- Stitch variants: dispatched, still processing server-side; re-fetch when ready.
+- Lint clean (0 errors, 2 cosmetic warnings). Dev server healthy.
