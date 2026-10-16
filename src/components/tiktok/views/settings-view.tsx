@@ -32,6 +32,19 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [eligibilityAlertsEnabled, setEligibilityAlertsEnabled] = React.useState(true);
   const [mutedHandlesRaw, setMutedHandlesRaw] = React.useState("");
   const [savingNotifs, setSavingNotifs] = React.useState(false);
+  // 2FA state
+  const [twoFactorEnabled, setTwoFactorEnabled] = React.useState(false);
+  const [setupData, setSetupData] = React.useState<{
+    secret: string;
+    qrDataUrl: string;
+    manualKey: string;
+  } | null>(null);
+  const [setupLoading, setSetupLoading] = React.useState(false);
+  const [totpCode, setTotpCode] = React.useState("");
+  const [verifyingTotp, setVerifyingTotp] = React.useState(false);
+  const [backupCodes, setBackupCodes] = React.useState<string[] | null>(null);
+  const [disableCode, setDisableCode] = React.useState("");
+  const [disabling, setDisabling] = React.useState(false);
   const { toast } = useToast();
 
   React.useEffect(() => {
@@ -72,6 +85,93 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       })
       .catch((e) => console.warn("notif settings fetch failed:", e));
   }, []);
+
+  // Fetch 2FA status in parallel.
+  React.useEffect(() => {
+    fetch("/api/account/2fa/status", { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) return;
+        const data = (await r.json()) as { enabled: boolean };
+        setTwoFactorEnabled(data.enabled);
+      })
+      .catch((e) => console.warn("2FA status fetch failed:", e));
+  }, []);
+
+  const start2FASetup = async () => {
+    setSetupLoading(true);
+    try {
+      const r = await fetch("/api/account/2fa/setup", { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = (await r.json()) as {
+        secret: string;
+        qrDataUrl: string;
+        manualKey: string;
+      };
+      setSetupData(data);
+    } catch (e) {
+      console.error(e);
+      setError((e as Error).message);
+    } finally {
+      setSetupLoading(false);
+    }
+  };
+
+  const verify2FA = async () => {
+    if (!totpCode.trim()) {
+      setError("Enter the 6-digit code from your authenticator app");
+      return;
+    }
+    setVerifyingTotp(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/account/2fa/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: totpCode.trim() }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "verify failed");
+      setBackupCodes(data.backupCodes as string[]);
+      setTwoFactorEnabled(true);
+      setSetupData(null);
+      setTotpCode("");
+      toast({
+        title: "2FA enabled",
+        description: "Save your backup codes — they will only be shown once.",
+      });
+    } catch (e) {
+      console.error(e);
+      setError((e as Error).message);
+    } finally {
+      setVerifyingTotp(false);
+    }
+  };
+
+  const disable2FA = async () => {
+    if (!disableCode.trim()) {
+      setError("Enter a TOTP code or backup code to confirm disabling 2FA");
+      return;
+    }
+    setDisabling(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/account/2fa/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: disableCode.trim() }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "disable failed");
+      setTwoFactorEnabled(false);
+      setDisableCode("");
+      toast({ title: "2FA disabled", description: "Login will use password only." });
+    } catch (e) {
+      console.error(e);
+      setError((e as Error).message);
+    } finally {
+      setDisabling(false);
+    }
+  };
 
   const saveNotifications = async () => {
     setSavingNotifs(true);
@@ -381,6 +481,140 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             "Save notification settings"
           )}
         </Button>
+      </div>
+
+      {/* 2FA section */}
+      <div className="glass-panel rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-4">
+        <h2 className="text-base font-bold text-white flex items-center gap-2">
+          <Shield className="w-4 h-4 text-cyan-400" />
+          Two-factor authentication (TOTP)
+        </h2>
+
+        {twoFactorEnabled ? (
+          <div className="space-y-3">
+            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+              ✅ 2FA is enabled. You&apos;ll need a 6-digit code from your
+              authenticator app (or a backup code) on every login.
+            </div>
+            {backupCodes && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+                <p className="text-xs font-medium text-amber-300">
+                  Backup codes (shown only once — save them now):
+                </p>
+                <div className="grid grid-cols-2 gap-1 font-mono text-xs text-amber-200">
+                  {backupCodes.map((c) => (
+                    <span key={c}>{c}</span>
+                  ))}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setBackupCodes(null)}
+                  className="border-amber-500/40 text-amber-300 hover:bg-amber-500/20 h-8"
+                >
+                  I&apos;ve saved them
+                </Button>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="disable-2fa" className="text-slate-200">
+                Disable 2FA
+              </Label>
+              <Input
+                id="disable-2fa"
+                type="text"
+                value={disableCode}
+                onChange={(e) => setDisableCode(e.target.value)}
+                placeholder="Enter TOTP code or backup code"
+                className="glass-input-box text-slate-100 placeholder-slate-500 border-0 focus-visible:ring-1 focus-visible:ring-[#00f2fe]"
+              />
+              <Button
+                onClick={disable2FA}
+                disabled={disabling || !disableCode.trim()}
+                variant="outline"
+                className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-11"
+              >
+                {disabling ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Disable 2FA"
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : setupData ? (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-400">
+              Scan this QR code with your authenticator app (Google
+              Authenticator, 1Password, Authy, etc.) to add an account.
+            </p>
+            <div className="rounded-lg bg-white p-3 inline-block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={setupData.qrDataUrl}
+                alt="TOTP QR code"
+                width={200}
+                height={200}
+              />
+            </div>
+            <div className="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-xs">
+              <p className="text-slate-500">Manual key (if you can&apos;t scan):</p>
+              <p className="font-mono text-cyan-300 mt-1 break-all">{setupData.manualKey}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="totp-code" className="text-slate-200">
+                6-digit code from your authenticator app
+              </Label>
+              <Input
+                id="totp-code"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="123456"
+                className="glass-input-box text-slate-100 placeholder-slate-500 border-0 focus-visible:ring-1 focus-visible:ring-[#00f2fe] text-2xl tracking-[0.5em] text-center font-mono"
+              />
+              <Button
+                onClick={verify2FA}
+                disabled={verifyingTotp || totpCode.length !== 6}
+                className="w-full gradient-btn-primary text-white font-semibold rounded-xl border-0 h-11"
+              >
+                {verifyingTotp ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  "Verify + enable 2FA"
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-400">
+              Add an extra layer of security to your account. Once enabled,
+              every login will require a 6-digit code from your authenticator
+              app in addition to your password.
+            </p>
+            <Button
+              onClick={start2FASetup}
+              disabled={setupLoading}
+              className="gradient-btn-primary text-white font-semibold rounded-xl border-0 h-11"
+            >
+              {setupLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                "Set up 2FA"
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       {error && (

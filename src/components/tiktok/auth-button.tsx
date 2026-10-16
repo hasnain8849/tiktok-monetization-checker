@@ -113,6 +113,10 @@ function AuthDialog({ open, onClose, toast }: AuthDialogProps) {
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // When the server returns "2FA code required — ...", switch the dialog
+  // into the "totp" mode where the user enters their 6-digit code.
+  const [needsTotp, setNeedsTotp] = React.useState(false);
+  const [totp, setTotp] = React.useState("");
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,11 +139,17 @@ function AuthDialog({ open, onClose, toast }: AuthDialogProps) {
       password: password.trim(),
       action: mode === "signup" ? "signup" : "login",
       name: mode === "signup" ? name.trim() : "",
+      totp: needsTotp ? totp.trim() : "",
       redirect: false,
     });
     setLoading(false);
     if (res?.error) {
       setError(res.error);
+      // If the server says "2FA code required", switch the dialog into
+      // the TOTP-entry mode and prompt the user to enter their code.
+      if (res.error.toLowerCase().includes("2fa code required")) {
+        setNeedsTotp(true);
+      }
       toast({
         title: mode === "signup" ? "Signup failed" : "Login failed",
         description: res.error,
@@ -157,6 +167,8 @@ function AuthDialog({ open, onClose, toast }: AuthDialogProps) {
     setName("");
     setEmail("");
     setPassword("");
+    setTotp("");
+    setNeedsTotp(false);
     setError(null);
     onClose();
   };
@@ -245,6 +257,29 @@ function AuthDialog({ open, onClose, toast }: AuthDialogProps) {
               className="glass-input-box text-slate-100 placeholder-slate-500 border-0 focus-visible:ring-1 focus-visible:ring-[#00f2fe]"
             />
           </div>
+
+          {needsTotp && (
+            <div className="space-y-2 rounded-md border border-cyan-500/40 bg-cyan-500/5 p-3">
+              <Label htmlFor="auth-totp" className="text-slate-200 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                2FA code (6 digits or backup code)
+              </Label>
+              <Input
+                id="auth-totp"
+                type="text"
+                inputMode="text"
+                value={totp}
+                onChange={(e) => setTotp(e.target.value)}
+                placeholder="123456 or ABCD1234"
+                autoFocus
+                className="glass-input-box text-slate-100 placeholder-slate-500 border-0 focus-visible:ring-1 focus-visible:ring-[#00f2fe] font-mono tracking-wider"
+              />
+              <p className="text-xs text-slate-500">
+                Open your authenticator app and enter the 6-digit code, or use
+                one of your saved backup codes.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">

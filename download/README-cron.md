@@ -77,3 +77,30 @@ curl -X POST -H "Authorization: Bearer your-strong-secret-here" \
 
 The alert email uses `src/emails/eligibility-alert-email.tsx` — a React
 Email template that renders to both HTML + a plain-text fallback.
+
+## Other cron endpoints
+
+### /api/cron/weekly-digest — Weekly summary email
+
+Sends a digest email to every user with saved audits summarizing their
+audits' statuses + the number of new unlocks in the last 7 days. Honors
+each user's NotificationSettings (eligibilityAlertsEnabled + mutedHandles).
+
+```cron
+# Every Monday at 8 AM
+0 8 * * 1 curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+  http://localhost:3000/api/cron/weekly-digest
+```
+
+### /api/cron/audit-retention — Delete old audit log entries
+
+Deletes AuditLog, EmailLog, and WebhookDelivery rows older than
+AUDIT_RETENTION_DAYS (default 90). Returns the count of deleted rows.
+
+```cron
+# Daily at midnight
+0 0 * * * curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+  http://localhost:3000/api/cron/audit-retention
+```
+
+Set `AUDIT_RETENTION_DAYS=180` in .env to keep entries for 6 months.

@@ -10,6 +10,7 @@ import { ProfileDetailView } from "@/components/tiktok/views/profile-detail-view
 import { DashboardView } from "@/components/tiktok/views/dashboard-view";
 import { AdminView } from "@/components/tiktok/views/admin-view";
 import { SettingsView } from "@/components/tiktok/views/settings-view";
+import { StripeDocsView } from "@/components/tiktok/views/stripe-docs-view";
 import { type Profile } from "@/lib/tiktok-data";
 
 type Screen =
@@ -20,7 +21,8 @@ type Screen =
   | { kind: "restricted"; profile: Profile }
   | { kind: "dashboard" }
   | { kind: "admin" }
-  | { kind: "settings" };
+  | { kind: "settings" }
+  | { kind: "stripe-docs" };
 
 // ViewKey adds an "admin" type that is only shown when the session user is an admin.
 export type AppViewKey = ViewKey | "admin";
@@ -31,6 +33,7 @@ export default function Home() {
   // Callbacks for AuthButton to navigate to admin / settings screens.
   const goAdmin = React.useCallback(() => setScreen({ kind: "admin" }), []);
   const goSettings = React.useCallback(() => setScreen({ kind: "settings" }), []);
+  const goStripeDocs = React.useCallback(() => setScreen({ kind: "stripe-docs" }), []);
 
   const navigate = (v: ViewKey) => {
     if (v === "landing") setScreen({ kind: "landing" });
@@ -63,6 +66,7 @@ export default function Home() {
         onSearch={setSearch}
         onAdminNavigate={goAdmin}
         onSettingsNavigate={goSettings}
+        onStripeDocsNavigate={goStripeDocs}
       />
       <main className="flex-1">
         {screen.kind === "landing" && (
@@ -120,6 +124,9 @@ export default function Home() {
         )}
         {screen.kind === "settings" && (
           <SettingsView onBack={() => setScreen({ kind: "landing" })} />
+        )}
+        {screen.kind === "stripe-docs" && (
+          <StripeDocsView onBack={() => setScreen({ kind: "landing" })} />
         )}
       </main>
       <Footer onNavigate={navigate} />

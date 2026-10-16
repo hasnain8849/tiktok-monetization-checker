@@ -150,3 +150,17 @@ model NotificationSettings {
   mutedHandlesJson        String   @default("[]")
   updatedAt               DateTime @updatedAt
 }
+
+// TOTP two-factor auth secrets. One row per user. The `secret` is the
+// base32-encoded TOTP seed stored in plaintext (suitable for sandboxed
+// demos; in production encrypt at rest with a KMS-managed key). The
+// `verifiedAt` field is null until the user confirms a 6-digit code.
+model TwoFactor {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  secret     String   // base32 TOTP secret
+  backupCodes String  @default("[]") // JSON array of one-time backup codes
+  verifiedAt DateTime?  // null until the user confirms a TOTP code
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

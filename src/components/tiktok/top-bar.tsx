@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Home, Search, BarChart3, Bell, Sparkles } from "lucide-react";
+import { Home, Search, BarChart3, Bell, Sparkles, Book } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -24,6 +24,7 @@ interface TopBarProps {
   onSearch?: (v: string) => void;
   onAdminNavigate?: () => void;
   onSettingsNavigate?: () => void;
+  onStripeDocsNavigate?: () => void;
 }
 
 const navLinks: { key: ViewKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -40,7 +41,7 @@ export function TikTokMark() {
   );
 }
 
-export function TopBar({ active, onNavigate, search, onSearch, onAdminNavigate, onSettingsNavigate }: TopBarProps) {
+export function TopBar({ active, onNavigate, search, onSearch, onAdminNavigate, onSettingsNavigate, onStripeDocsNavigate }: TopBarProps) {
   return (
     <header className="w-full border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
@@ -82,6 +83,16 @@ export function TopBar({ active, onNavigate, search, onSearch, onAdminNavigate, 
               </button>
             );
           })}
+          {onStripeDocsNavigate && (
+            <button
+              onClick={onStripeDocsNavigate}
+              className="flex items-center gap-1.5 py-1 text-slate-400 hover:text-white transition-colors"
+              title="Stripe integration docs"
+            >
+              <Book className="h-4 w-4" />
+              Docs
+            </button>
+          )}
         </nav>
 
         {onSearch && (

@@ -552,3 +552,77 @@ Stage Summary:
 - 7 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{56..62}-*.png covering settings with notifications, saved notif settings, suppressed payment verified, webhooks tab, metrics tab, audit log emails list, email preview dialog.
 - Stitch variants: dispatched, still processing server-side; re-fetch when ready.
 - Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.
+
+---
+Task ID: weekly-digest-retention-2fa-stripe-docs-13
+Agent: main
+Task: Continue all next steps: weekly digest email, audit log retention policy, TOTP 2FA for admins, Stripe test-mode docs page, re-poll Stitch.
+
+Work Log:
+- Installed otplib v13 + @otplib/plugin-crypto-noble + @otplib/plugin-base32-scure + qrcode + @types/qrcode + react-markdown + remark-gfm.
+  - otplib v13 uses a fully functional async API requiring explicit crypto + base32 plugins. Took 3 attempts to get the API right (legacy `authenticator` singleton removed in v13; class API uses sync methods that throw with the noble/scure plugins; functional API works async).
+- Created src/emails/weekly-digest-email.tsx — branded React Email template with 4 KPI summary rows + a top-handles table (handle, status, followers) + CTA button.
+- Added TwoFactor Prisma model (userId unique, secret base32, backupCodes JSON, verifiedAt). Pushed to SQLite.
+- Added 3 new Prisma models: TwoFactor (id, userId, secret, backupCodes, verifiedAt, createdAt, updatedAt).
+- Built src/lib/two-factor.ts:
+  - generateSecret(), buildOtpAuthUri (manual URL construction following the otpauth:// standard), generateQrDataUrl (via qrcode), verifyTotp (async via otplib.verify), generateBackupCodes (8 codes, 8 chars each, no ambiguous chars like I/O/0/1).
+- Created 4 new endpoints under /api/account/2fa/:
+  - GET /setup — generates a fresh secret, upserts an unverified TwoFactor row, returns secret + otpauth URI + QR data URL + manual key.
+  - POST /verify — confirms a 6-digit TOTP code against the stored secret. On success marks TwoFactor.verifiedAt, generates 8 backup codes, returns them (only shown once).
+  - POST /disable — requires a valid TOTP code or backup code to disable 2FA (prevents account takeover after just password compromise).
+  - GET /status — returns whether the user has 2FA enabled (does NOT expose the secret).
+- Updated next-auth credentials provider:
+  - Added `totp` to the credentials schema.
+  - Login path now checks for a verified TwoFactor row after bcrypt password verification. If found, requires a 6-digit TOTP code or one-time backup code. Backup codes are burned (removed from the array) after use. Throws "2FA code required" if no code provided, "Invalid 2FA code" if wrong.
+- Updated src/components/tiktok/auth-button.tsx AuthDialog:
+  - Added needsTotp + totp state. When the server returns "2FA code required", auto-switches to TOTP-entry mode.
+  - Added a cyan-bordered TOTP input field (6 digits or backup code) below the password field, only visible when needsTotp is true. Includes Shield icon, helpful copy, and font-mono tracking-wider styling.
+  - signIn() call now passes the totp credential.
+  - On success, resets needsTotp + totp + closes dialog.
+- Updated src/components/tiktok/views/settings-view.tsx with a 2FA section:
+  - State: twoFactorEnabled, setupData (secret + QR + manualKey), totpCode, verifyingTotp, backupCodes, disableCode, disabling.
+  - Fetches /api/account/2fa/status on mount.
+  - Three states:
+    1. NOT enabled + NO setupData → "Set up 2FA" button → calls /setup → shows QR + manual key + 6-digit input + "Verify + enable 2FA" button.
+    2. NOT enabled + setupData → QR + manual key + TOTP input. On verify success, shows backup codes (amber card, shown only once, "I've saved them" button) + transitions to enabled state.
+    3. Enabled → green "2FA is enabled" card + (if backupCodes just generated) amber backup codes card + Disable 2FA input (requires TOTP/backup code) + button.
+- Created GET /api/cron/weekly-digest endpoint:
+  - Bearer-token protected via CRON_SECRET.
+  - Groups SavedAudit by userId, fetches the user's settings, honors eligibilityAlertsEnabled + mutedHandles.
+  - Sends a WeeklyDigestEmail template with totalAudits, eligibleCount, restrictedCount, newUnlocks (UnlockedProfile count in last 7 days), top 3 visible handles.
+  - Returns {ok, durationMs, stats: {totalUsers, emailsSent, suppressed, errors}}.
+- Created GET /api/cron/audit-retention endpoint:
+  - Bearer-token protected via CRON_SECRET.
+  - Deletes AuditLog + EmailLog + WebhookDelivery rows older than AUDIT_RETENTION_DAYS (default 90) via Promise.all of 3 deleteMany calls.
+  - Returns {ok, durationMs, retentionDays, cutoff, deleted: {auditLog, emailLog, webhookDelivery}}.
+- Updated /home/z/my-project/download/README-cron.md with the weekly-digest and audit-retention endpoints (schedules, env vars, request format, response example).
+- Created GET /api/docs/stripe endpoint returning a Stripe test-mode walkthrough as Markdown:
+  - 9 sections: getting test keys, adding to .env, configuring the webhook, testing a payment, test cards table, webhook signature verification, going live, switching back to simulated mode, troubleshooting.
+  - Markdown includes code blocks, tables, links, ordered lists.
+- Built src/components/tiktok/views/stripe-docs-view.tsx rendering the walkthrough:
+  - Uses react-markdown + remark-gfm (for GitHub-flavored Markdown tables).
+  - Hand-styled per-element components (h1/h2/h3/p/ul/ol/li/strong/em/code/pre/a/table/thead/th/td/hr/blockquote) using Tailwind classes that match the dark-navy + cyan/magenta brand identity.
+  - Page header with violet-cyan gradient icon + "Stripe integration docs" title + back button.
+- Wired StripeDocsView into page.tsx as a new "stripe-docs" screen + goStripeDocs callback. Added a "Docs" link to the TopBar nav (with Book icon), only shown when onStripeDocsNavigate prop is passed.
+- Browser-verified end-to-end:
+  1. Logged in as owner@admin.local.
+  2. Settings → 2FA section → "Set up 2FA" button → QR code + manual key + 6-digit input displayed.
+  3. Generated a valid TOTP code for the secret via scripts + node + otplib → entered → "Verify + enable 2FA" → "2FA enabled" toast → 8 backup codes displayed in amber card.
+  4. Saved one backup code (9JHG724E) to /tmp/backup-code.txt.
+  5. Logout → Login with email + password → "2FA code required" error + auto-switched dialog to TOTP-entry mode showing the cyan-bordered TOTP input.
+  6. Entered the saved backup code → "Sign in" → logged in successfully (Settings + Admin buttons visible).
+  7. Admin → Docs nav link → Stripe docs page rendered with proper formatting (headings, code blocks, tables, lists, links).
+  8. curl POST /api/cron/weekly-digest with Bearer token → {ok:true, stats:{totalUsers:2, emailsSent:1, suppressed:0, errors:0}}.
+  9. curl POST /api/cron/audit-retention with Bearer token → {ok:true, retentionDays:90, deleted:{auditLog:0, emailLog:0, webhookDelivery:0}}.
+- Dev log: `[EMAIL-CONSOLE] to=owner@admin.local subject=Your weekly TikTok audit digest tag=weekly_digest`.
+- Lint clean: 0 errors, 2 cosmetic warnings (unused eslint-disable in apply-view, unused eslint-disable on img element in settings-view).
+- Re-polled Stitch for variants: still 7 screens, REIMAGINE generation continues server-side.
+
+Stage Summary:
+- Weekly digest cron endpoint sends a branded React Email digest to every user with saved audits (honoring their notification settings). Schedule via crontab or Vercel Cron.
+- Audit retention cron endpoint deletes old AuditLog/EmailLog/WebhookDelivery rows older than AUDIT_RETENTION_DAYS (default 90). Schedule daily at midnight.
+- TOTP 2FA fully implemented end-to-end: settings UI for setup (QR + manual key + 6-digit verify + backup codes), login flow auto-detects "2FA code required" and shows TOTP input, next-auth verifies the code against the stored secret (or accepts a one-time backup code). Backup codes are burned after use.
+- Stripe test-mode docs page renders a 9-section markdown walkthrough with react-markdown + remark-gfm, reachable via the "Docs" nav link in the TopBar. Covers getting test keys, .env config, webhook setup, test cards, signature verification, going live, switching back to simulated mode, troubleshooting.
+- 6 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{63..68}-*.png covering settings 2FA section, QR display, 2FA enabled with backup codes, 2FA login prompt, 2FA login success, Stripe docs page.
+- Stitch variants: dispatched, still processing server-side; re-fetch when ready.
+- Lint clean (0 errors, 2 cosmetic warnings). Dev server healthy.

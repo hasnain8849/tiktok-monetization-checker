@@ -2,6 +2,7 @@ import NextAuth, { type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { verifyTotp } from "@/lib/two-factor";
 
 // Email validation regex (simple — checks format only).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,11 +32,13 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
         action: { label: "Action", type: "text" }, // "login" | "signup"
         name: { label: "Name", type: "text" }, // signup-only
+        totp: { label: "TOTP", type: "text" }, // 6-digit code, login-only when 2FA enabled
       },
       async authorize(credentials) {
         const email = credentials?.email?.trim().toLowerCase();
         const password = credentials?.password?.trim();
         const action = (credentials?.action ?? "login").trim().toLowerCase();
+        const totp = credentials?.totp?.trim() ?? "";
 
         if (!email || !password) {
           throw new Error("Email and password are required");
@@ -66,6 +69,33 @@ export const authOptions: NextAuthOptions = {
         }
         const ok = await bcrypt.compare(password, user.password);
         if (!ok) throw new Error("Incorrect password");
+
+        // 2FA check: if the user has a verified TOTP setup, require a valid
+        // 6-digit code. Otherwise, allow the login to proceed.
+        const twoFactor = await db.twoFactor.findUnique({
+          where: { userId: user.id },
+        });
+        if (twoFactor?.verifiedAt) {
+          if (!totp) {
+            throw new Error("2FA code required — check your authenticator app");
+          }
+          // Allow either a TOTP code OR a one-time backup code.
+          const backupCodes = JSON.parse(twoFactor.backupCodes ?? "[]") as string[];
+          if (!backupCodes.includes(totp.toUpperCase())) {
+            const isValid = await verifyTotp(totp, twoFactor.secret);
+            if (!isValid) {
+              throw new Error("Invalid 2FA code");
+            }
+          } else {
+            // Burn the used backup code so it can't be reused.
+            const remaining = backupCodes.filter((c) => c !== totp.toUpperCase());
+            await db.twoFactor.update({
+              where: { userId: user.id },
+              data: { backupCodes: JSON.stringify(remaining) },
+            });
+          }
+        }
+
         return {
           id: user.id,
           email: user.email,
