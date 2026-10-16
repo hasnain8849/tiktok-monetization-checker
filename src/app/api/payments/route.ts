@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthUserId } from "@/lib/auth";
 import { notifyPaymentUpdate } from "@/lib/notify";
+import { getPaymentProvider } from "@/lib/payment-provider";
 
 // Bank account details shown to users who want to pay the unlock fee.
 // In a real app these would be a merchant bank account and the verification
@@ -48,6 +49,28 @@ export async function POST(req: NextRequest) {
     const handle = body.handle.trim().toLowerCase().replace(/^@/, "");
     const ref = body.paymentRef.trim();
 
+    // Create an intent with the active provider. In simulated mode this is a
+    // no-op (returns a fake intentId). In Stripe mode this creates a real
+    // PaymentIntent with the handle + paymentRef baked into the metadata.
+    const provider = await getPaymentProvider();
+    let intentResult: { intentId: string; clientSecret: string | null } | null = null;
+    if (provider.name === "stripe") {
+      try {
+        intentResult = await provider.createIntent({
+          handle: `@${handle}`,
+          amount: BANK_DETAILS.feeAmount,
+          currency: BANK_DETAILS.currency,
+          paymentRef: ref,
+        });
+      } catch (e) {
+        console.error("Provider createIntent failed:", e);
+        return NextResponse.json(
+          { error: "failed to create payment intent" },
+          { status: 500 }
+        );
+      }
+    }
+
     const attempt = await db.paymentAttempt.create({
       data: {
         userId: userId ?? null,
@@ -59,21 +82,27 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Simulate the bank webhook firing asynchronously. In production this
-    // would be an external POST to /api/payments/webhook from the bank's API.
-    // 30s delay gives an admin time to manually verify via /admin before the
-    // simulated webhook fires (so we can demonstrate the admin UI).
-    setTimeout(async () => {
-      try {
-        await verifyPaymentInternal(attempt.id);
-        console.log(`[webhook-sim] Payment ${attempt.id} verified for @${handle}`);
-      } catch (e) {
-        console.error("[webhook-sim] failed:", e);
-      }
-    }, 30000);
+    // Only schedule the simulated webhook when in simulated mode. In Stripe
+    // mode the real Stripe webhook fires externally when payment succeeds.
+    if (provider.name === "simulated") {
+      setTimeout(async () => {
+        try {
+          await verifyPaymentInternal(attempt.id);
+          console.log(`[webhook-sim] Payment ${attempt.id} verified for @${handle}`);
+        } catch (e) {
+          console.error("[webhook-sim] failed:", e);
+        }
+      }, 30000);
+    }
 
     return NextResponse.json(
-      { attemptId: attempt.id, status: "pending" },
+      {
+        attemptId: attempt.id,
+        status: "pending",
+        provider: provider.name,
+        clientSecret: intentResult?.clientSecret ?? null,
+        intentId: intentResult?.intentId ?? null,
+      },
       { status: 201 }
     );
   } catch (e) {

@@ -10,9 +10,18 @@ import {
   RefreshCw,
   AlertTriangle,
   ScrollText,
+  Users as UsersIcon,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 interface PaymentAttempt {
@@ -38,10 +47,12 @@ interface AuditEntry {
 }
 
 type StatusFilter = "all" | "pending" | "verified" | "rejected";
-type Tab = "payments" | "audit";
+type Tab = "payments" | "audit" | "users";
 
 export function AdminView({ onBack }: { onBack: () => void }) {
   const [tab, setTab] = React.useState<Tab>("payments");
+  // Track which handle to open the history modal for.
+  const [historyHandle, setHistoryHandle] = React.useState<string | null>(null);
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-6">
@@ -90,10 +101,28 @@ export function AdminView({ onBack }: { onBack: () => void }) {
           <ScrollText className="w-3.5 h-3.5" />
           Audit Log
         </button>
+        <button
+          onClick={() => setTab("users")}
+          className={
+            "px-4 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5 " +
+            (tab === "users"
+              ? "bg-cyan-500 text-slate-950"
+              : "text-slate-400 hover:text-white")
+          }
+        >
+          <UsersIcon className="w-3.5 h-3.5" />
+          Users
+        </button>
       </div>
 
-      {tab === "payments" && <PaymentsPanel />}
+      {tab === "payments" && <PaymentsPanel onViewHandle={setHistoryHandle} />}
       {tab === "audit" && <AuditPanel />}
+      {tab === "users" && <UsersPanel />}
+
+      <HandleHistoryDialog
+        handle={historyHandle}
+        onClose={() => setHistoryHandle(null)}
+      />
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 text-xs text-slate-400 flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
@@ -113,7 +142,7 @@ export function AdminView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function PaymentsPanel() {
+function PaymentsPanel({ onViewHandle }: { onViewHandle: (h: string) => void }) {
   const [attempts, setAttempts] = React.useState<PaymentAttempt[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState<StatusFilter>("all");
@@ -253,7 +282,16 @@ function PaymentsPanel() {
               ) : (
                 attempts.map((a) => (
                   <tr key={a.id} className="hover:bg-slate-900/40 transition-colors">
-                    <td className="px-5 py-3 font-medium text-white">{a.handle}</td>
+                    <td className="px-5 py-3 font-medium text-white">
+                      <button
+                        onClick={() => onViewHandle(a.handle)}
+                        className="hover:text-cyan-300 transition-colors inline-flex items-center gap-1"
+                        title="View handle history"
+                      >
+                        {a.handle}
+                        <History className="w-3 h-3 opacity-60" />
+                      </button>
+                    </td>
                     <td className="px-5 py-3 text-slate-300 font-mono text-xs">
                       {a.paymentRef}
                     </td>
@@ -498,5 +536,342 @@ function MetadataCell({ metadata }: { metadata: string }) {
         </span>
       ))}
     </span>
+  );
+}
+
+interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  createdAt: string;
+  hasPassword: boolean;
+  auditCount: number;
+  paymentCount: number;
+  unlockCount: number;
+}
+
+function UsersPanel() {
+  const [users, setUsers] = React.useState<AdminUser[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const { toast } = useToast();
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/admin/users", { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = (await r.json()) as { users: AdminUser[] };
+      setUsers(data.users ?? []);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to load users", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const setRole = async (id: string, role: "admin" | "user") => {
+    try {
+      const r = await fetch(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "update failed");
+      toast({
+        title: role === "admin" ? "User promoted" : "User demoted",
+        description: data.changed ? `Role is now ${role}` : "No change",
+      });
+      if (data.changed) {
+        setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role } : u)));
+      }
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Update failed",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-xs text-slate-400">
+          {users.length} registered user{users.length === 1 ? "" : "s"}. Promote to admin or demote back to user.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={load}
+          disabled={loading}
+          className="border-slate-700 text-slate-200 hover:bg-slate-800"
+        >
+          <RefreshCw className={"h-4 w-4 " + (loading ? "animate-spin" : "")} />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/40 text-slate-400">
+              <tr className="text-left">
+                <th className="px-5 py-3 font-medium">User</th>
+                <th className="px-5 py-3 font-medium">Role</th>
+                <th className="px-5 py-3 font-medium">Audits</th>
+                <th className="px-5 py-3 font-medium">Payments</th>
+                <th className="px-5 py-3 font-medium">Unlocks</th>
+                <th className="px-5 py-3 font-medium">Joined</th>
+                <th className="px-5 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {loading && users.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-12 text-center text-slate-500 flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </td>
+                </tr>
+              ) : users.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-12 text-center text-slate-500">
+                    No users registered yet.
+                  </td>
+                </tr>
+              ) : (
+                users.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-900/40 transition-colors">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-[#00f2fe] to-[#fe2c55] flex items-center justify-center text-white text-[10px] font-bold">
+                          {(u.name ?? u.email).slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-medium text-white">{u.name ?? "—"}</p>
+                          <p className="text-xs text-slate-500">{u.email}</p>
+                          {!u.hasPassword && (
+                            <span className="text-[10px] text-amber-400 inline-block mt-0.5">
+                              no password
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <RoleBadge role={u.role} />
+                    </td>
+                    <td className="px-5 py-3 tabular-nums text-slate-300">{u.auditCount}</td>
+                    <td className="px-5 py-3 tabular-nums text-slate-300">{u.paymentCount}</td>
+                    <td className="px-5 py-3 tabular-nums text-slate-300">{u.unlockCount}</td>
+                    <td className="px-5 py-3 text-slate-500 inline-flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      {new Date(u.createdAt).toLocaleDateString("en-US")}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      {u.role === "admin" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setRole(u.id, "user")}
+                          className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10 h-8"
+                        >
+                          Demote
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => setRole(u.id, "admin")}
+                          className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 border-0 h-8"
+                        >
+                          Promote
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  if (role === "admin") {
+    return (
+      <Badge variant="outline" className="bg-cyan-500/20 text-cyan-300 border-0">
+        <ShieldCheck className="w-3 h-3 mr-1" />
+        Admin
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="bg-slate-700/40 text-slate-300 border-0">
+      User
+    </Badge>
+  );
+}
+
+interface HandleHistoryData {
+  handle: string;
+  attempts: PaymentAttempt[];
+  auditEntries: AuditEntry[];
+  unlocked: boolean;
+  unlockedAt: string | null;
+  paymentRef: string | null;
+}
+
+function HandleHistoryDialog({
+  handle,
+  onClose,
+}: {
+  handle: string | null;
+  onClose: () => void;
+}) {
+  const [data, setData] = React.useState<HandleHistoryData | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!handle) {
+      setData(null);
+      return;
+    }
+    setLoading(true);
+    fetch(`/api/admin/handles/${encodeURIComponent(handle)}`, { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return (await r.json()) as HandleHistoryData;
+      })
+      .then((d) => setData(d))
+      .catch((e) => console.error(e))
+      .finally(() => setLoading(false));
+  }, [handle]);
+
+  return (
+    <Dialog open={!!handle} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="glass-panel border-slate-700 bg-[#0d1626] text-slate-100 max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <History className="w-5 h-5 text-cyan-400" />
+            Handle history: {handle}
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            All payment attempts and audit-log entries for this handle.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading && !data ? (
+          <div className="py-10 text-center text-slate-500 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading...
+          </div>
+        ) : data ? (
+          <div className="space-y-5">
+            {/* Unlock status card */}
+            <div
+              className={
+                "rounded-xl border p-4 " +
+                (data.unlocked
+                  ? "border-emerald-500/30 bg-emerald-500/10"
+                  : "border-slate-700 bg-slate-900/40")
+              }
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-wide">Unlock status</p>
+                  {data.unlocked ? (
+                    <p className="mt-1 text-base font-bold text-emerald-300 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Unlocked
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-base font-bold text-slate-300">Not unlocked</p>
+                  )}
+                </div>
+                {data.unlocked && data.unlockedAt && (
+                  <p className="text-xs text-slate-400">
+                    Paid {new Date(data.unlockedAt).toLocaleString("en-US")}
+                    {data.paymentRef && (
+                      <span className="ml-2 font-mono text-cyan-300">{data.paymentRef}</span>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Attempts */}
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                Payment attempts ({data.attempts.length})
+              </p>
+              {data.attempts.length === 0 ? (
+                <p className="text-xs text-slate-500 py-3 text-center">No attempts.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {data.attempts.map((a) => (
+                    <li
+                      key={a.id}
+                      className="rounded-md border border-slate-800 bg-slate-900/40 p-3 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-mono text-slate-300 truncate">
+                          {a.paymentRef}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5 inline-flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {new Date(a.createdAt).toLocaleString("en-US")}
+                          <span className="ml-1">· ${a.amount.toFixed(2)} {a.currency}</span>
+                        </p>
+                      </div>
+                      <StatusBadge status={a.status} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Audit entries */}
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                Audit log ({data.auditEntries.length})
+              </p>
+              {data.auditEntries.length === 0 ? (
+                <p className="text-xs text-slate-500 py-3 text-center">No audit entries.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {data.auditEntries.map((e) => (
+                    <li
+                      key={e.id}
+                      className="rounded-md border border-slate-800 bg-slate-900/40 p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <ActionBadge action={e.action} />
+                        <span className="text-xs text-slate-500">
+                          {new Date(e.createdAt).toLocaleString("en-US")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">by {e.actorEmail}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-10 text-center text-red-400">Failed to load.</div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

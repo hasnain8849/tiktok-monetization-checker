@@ -362,3 +362,48 @@ Stage Summary:
 - 10 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{38..47}-*.png covering settings view, name change, password change, old/new password login, audit log table, websocket awaiting + instant verify transition.
 - Stitch variants: dispatched, still processing server-side; re-fetch when ready.
 - Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.
+
+---
+Task ID: users-panel-handle-history-stripe-9
+Agent: main
+Task: Continue all next steps: admin user management panel (list/promote/demote), per-handle transaction history view, Stripe-ready payment provider abstraction, re-poll Stitch.
+
+Work Log:
+- Created GET /api/admin/users endpoint (admin-only). Returns last 200 users with id, email, name, role, createdAt, hasPassword, and aggregate counts (auditCount, paymentCount, unlockCount) computed via Prisma groupBy on SavedAudit / PaymentAttempt / UnlockedProfile joined by userId.
+- Created PATCH /api/admin/users/[id] endpoint (admin-only). Body { role: "admin" | "user" }. Records "promote_user" or "demote_user" audit entry with previousRole, newRole, targetEmail, by. Prevents admins from demoting themselves (returns 400 "You cannot demote yourself").
+- Added Users tab to AdminView (3rd tab after Payments / Audit Log). Shows a table with avatar + name + email + role badge + audit/payment/unlock counts + join date + Promote/Demote button. Promote = cyan button, Demote = amber-outline button. Empty state shows "No users registered yet". Loading state shows spinner.
+- Created GET /api/admin/handles/[handle] endpoint (admin-only). Returns unlock status (boolean + paidAt + paymentRef), all PaymentAttempts for that handle (last 100), and all AuditLog entries with targetHandle matching (last 100) — in one response.
+- Added HandleHistoryDialog modal that opens when an admin clicks a handle in the Payments table. Shows: (1) Unlock status card (green if unlocked, with paid-at timestamp + payment ref), (2) Payment attempts list (each with ref + timestamp + amount + status badge), (3) Audit log entries (each with action badge + timestamp + actor email). Closes via X or backdrop click.
+- Made handle cell in Payments table a clickable button (with History icon) that opens the handle history dialog.
+- Built payment-provider abstraction in src/lib/payment-provider.ts:
+  - ProviderName type ("simulated" | "stripe"), PaymentProvider interface with createIntent + verifyWebhook methods.
+  - getProviderName() reads PAYMENT_PROVIDER env var (default "simulated").
+  - simulatedProvider: createIntent returns a fake intentId, verifyWebhook accepts any payload.
+  - makeStripeProvider() dynamically imports the Stripe SDK, constructs a Stripe client with STRIPE_SECRET_KEY, and implements:
+    - createIntent: calls stripe.paymentIntents.create with the handle + paymentRef baked into metadata.
+    - verifyWebhook: uses stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET) to verify the signature.
+  - getPaymentProvider() caches the provider instance per process.
+- Installed stripe SDK.
+- Updated /api/payments/webhook route to handle both providers:
+  - If provider.name === "stripe": reads the raw body + stripe-signature header, calls provider.verifyWebhook to construct+verify the event, extracts handle + paymentRef from event.data.object.metadata, finds the matching PaymentAttempt by (handle, paymentRef), and calls verifyPaymentInternal.
+  - If provider.name === "simulated": keeps the existing simple-JSON body logic (attemptId OR {paymentRef, handle}).
+- Updated /api/payments POST route:
+  - When provider.name === "stripe", calls provider.createIntent() to create a real Stripe PaymentIntent (returns intentId + clientSecret). The clientSecret is returned in the response so the frontend could be wired to Stripe Elements for client-side confirmation.
+  - The simulated setTimeout webhook only fires when provider.name === "simulated". In Stripe mode the real Stripe webhook fires externally.
+  - Response now includes provider name + clientSecret + intentId.
+- Restored NEXTAUTH_SECRET + NEXTAUTH_URL + added PAYMENT_PROVIDER=simulated to .env (these had been lost in an earlier restart; was causing JWEDecryptionFailed + 403 on all admin endpoints).
+- Browser-verified:
+  1. Login as owner@admin.local (after restoring NEXTAUTH_SECRET).
+  2. Admin → Users tab → "1 registered user. Promote to admin or demote back to user." Shows Owner Kim with Admin badge, audit/payment/unlock counts, and Demote button.
+  3. Admin → Payments tab → click on @prankzlife handle → HandleHistoryDialog modal opens with full history: Unlock status (Unlocked, paid at 12:42:36 PM, ref TXN-WS-001), Payment attempts (1: TXN-WS-001, $49 USD, Verified), Audit log (1: verify_payment by owner@admin.local).
+  4. POST /api/payments with test payload → response includes provider: "simulated", clientSecret: null, intentId: null.
+- Re-polled Stitch for variants: still 7 screens, REIMAGINE generation continues processing server-side.
+
+Stage Summary:
+- Admin view now has 3 tabs: Payments, Audit Log, Users. Users tab supports promote/demote with audit logging and self-demotion protection.
+- Per-handle transaction history modal shows the complete timeline for any handle: unlock status + all payment attempts + all admin audit entries targeting that handle. Reachable by clicking any handle in the Payments tab.
+- Payment provider abstraction supports both simulated (current) and Stripe (production) modes via PAYMENT_PROVIDER env var. The Stripe provider uses the official Stripe SDK for PaymentIntent creation + webhook signature verification. Switching to real Stripe requires only: set PAYMENT_PROVIDER=stripe + STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET in .env, point Stripe's webhook at /api/payments/webhook.
+- All admin actions (promote/demote) are now recorded in the audit log with full metadata (previousRole, newRole, targetEmail, by).
+- 2 new verification screenshots in /home/z/my-project/download/companion-web-page/app-{48,49}-*.png covering Users tab + handle history modal.
+- Stitch variants: dispatched, still processing server-side; re-fetch when ready.
+- Lint clean (0 errors, 1 cosmetic warning). Dev server healthy.
